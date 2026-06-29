@@ -1,10 +1,22 @@
 import { useState, useEffect } from 'react'
 import API from '../API/api'
 import { useParams } from 'react-router-dom'
-import { Link, Trash2, PenLine } from 'lucide-react';
+import { Link, PenLine } from 'lucide-react';
 import Header from '../Components/Header';
 import StageStepper from '../Components/Stagesstepper';
-
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import SortableStageRow from '../Components/Sortablestagerow'
 interface Project {
   id: string;
   executor_id: string;
@@ -54,7 +66,11 @@ export default function ProjectDetait() {
   const [stageName, setStageName] = useState("")
   const [stages, setStages] = useState<Stage[]>([])
   const [isSaving, setIsSaving] = useState(false);
-
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  );
   useEffect(() => {
     API.get(`/projects/${projectId}`)
       .then(res => {
@@ -82,6 +98,10 @@ export default function ProjectDetait() {
 
   async function createStage(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (stageName.length < 1) {
+      alert("Задача не может быть пустой")
+      return
+    }
     try {
       const response = await API.post(`/projects/${projectId}/stages`, {
         name: stageName
@@ -110,16 +130,26 @@ export default function ProjectDetait() {
   async function handleSaveAll() {
     setIsSaving(true);
     try {
-      // Promise.all запускает все запросы ПАРАЛЛЕЛЬНО, и ждёт, пока
-      // ВСЕ они завершатся — быстрее, чем await в цикле for по очереди.
+      // 1. Имена — отдельными PATCH-запросами, как и раньше
       await Promise.all(
-        stages.map(stage =>
+        stages.map((stage) =>
           API.patch(`/projects/${projectId}/stages/${stage.id}`, {
             name: stage.name,
           })
         )
       );
-      alert('Изменения сохранены');
+
+      // 2. Порядок — ОДНИМ запросом на reorder-эндпоинт, который мы
+      // делали на бэкенде. stages уже хранят актуальные position
+      // после handleDragEnd, просто собираем их в нужный формат.
+      await API.put(`/projects/${projectId}/stages/reorder`, {
+        stages: stages.map((stage) => ({
+          id: stage.id,
+          position: stage.position,
+        })),
+      });
+
+      window.location.reload()
     } catch (err) {
       console.error(err);
       alert('Не удалось сохранить некоторые изменения');
@@ -127,6 +157,7 @@ export default function ProjectDetait() {
       setIsSaving(false);
     }
   }
+
 
   async function deleteStage(id: string) {
     try {
@@ -137,6 +168,33 @@ export default function ProjectDetait() {
       alert('Не удалось удалить этап');
     }
   }
+
+
+  // Вызывается, когда пользователь ОТПУСТИЛ элемент после перетаскивания.
+  function handleDragEnd(event) {
+    const { active, over } = event;
+
+    // over может быть null, если бросили элемент не над списком
+    // (например, вынесли за пределы модалки) — тогда ничего не делаем.
+    if (!over || active.id === over.id) return;
+
+    setStages((prevStages) => {
+      const oldIndex = prevStages.findIndex((s) => s.id === active.id);
+      const newIndex = prevStages.findIndex((s) => s.id === over.id);
+
+      // arrayMove — готовая утилита из @dnd-kit/sortable, переставляет
+      // элемент массива с oldIndex на newIndex, возвращая НОВЫЙ массив
+      // (не мутирует исходный — это важно для React state).
+      const reordered = arrayMove(prevStages, oldIndex, newIndex);
+
+      // После локальной перестановки сразу пересчитываем position
+      // у каждого элемента по его новому индексу в массиве — это и
+      // есть то, что отправится на сервер при следующем handleSaveAll
+      // ИЛИ можно отправить сразу здесь же (см. вариант Б ниже).
+      return reordered.map((stage, index) => ({ ...stage, position: index }));
+    });
+  }
+
 
   return (
     <>
@@ -220,28 +278,32 @@ export default function ProjectDetait() {
                           <div className='mt-6'>
                             <h1 className='text-2xl mx-auto font-bold'>Управление шагами</h1>
                             <div className='mt-8'>
-                              {/* ИСПРАВЛЕНО: добавлен key, onChange для
-                                  инпута (его не было — поле было заблокировано) */}
-                              {stages.map(stage => (
-                                <div key={stage.id} className='flex items-center justify-between mx-8 mb-3'>
-                                  <input
-                                    value={stage.name}
-                                    onChange={(e) => handleNameChange(stage.id, e.target.value)}
-                                    type="text"
-                                    className="flex-1 mr-3 rounded border border-gray-300 px-3 py-1.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                                  />
-                                  <button
-                                    onClick={() => deleteStage(stage.id)}
-                                    className='p-3 rounded bg-red-500 hover:bg-red-600'
-                                  >
-                                    <Trash2 size={16} color='white' />
-                                  </button>
-                                </div>
-                              ))}
+                              <DndContext
+                                sensors={sensors}
+                                collisionDetection={closestCenter}
+                                onDragEnd={handleDragEnd}
+                              >
+                                {/* items — массив id в ТЕКУЩЕМ порядке. SortableContext должен
+          получать актуальный список id на каждый рендер, иначе он не
+          поймёт, что порядок изменился. */}
+                                <SortableContext
+                                  items={stages.map((s) => s.id)}
+                                  strategy={verticalListSortingStrategy}
+                                >
+                                  {stages.map((stage) => (
+                                    <SortableStageRow
+                                      key={stage.id}
+                                      stage={stage}
+                                      onNameChange={handleNameChange}
+                                      onDelete={deleteStage}
+                                    />
+                                  ))}
+                                </SortableContext>
+                              </DndContext>
                             </div>
 
-                            {/* НОВОЕ: кнопки "Сохранить" не было вообще —
-                                handleSaveAll существовала, но никем не вызывалась */}
+                            {/* Кнопка "Сохранить" теперь должна отправлять и name, И position —
+      см. обновлённую handleSaveAll ниже */}
                             <button
                               onClick={handleSaveAll}
                               disabled={isSaving}

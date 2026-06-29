@@ -6,9 +6,6 @@
 // → Верстка ⬜ → Тестирование ⬜ → Релиз ⬜".
 
 import { Check } from "lucide-react";
-import { useEffect, useState } from "react";
-import API from '../API/api'
-import { useParams } from "react-router-dom";
 // Маппинг статуса этапа на цвета — централизованно в одном месте,
 // чтобы не разбрасывать одинаковые условия по всему JSX.
 const STATUS_STYLES = {
@@ -29,7 +26,20 @@ const STATUS_STYLES = {
   },
 };
 
-export default function StageStepper({ stages, onStageClick }) {
+interface Stage {
+  id: string;
+  project_id: string;
+  name: string;
+  position: number;
+  status: string;
+  created_at: string;
+}
+interface StageStepperProps {
+  stages: Stage[];
+  onStageClick: (stage: Stage) => void;
+}
+
+export default function StageStepper({ stages, onStageClick }: StageStepperProps) {
 
   return (
     <div className="flex items-start overflow-x-auto py-4">

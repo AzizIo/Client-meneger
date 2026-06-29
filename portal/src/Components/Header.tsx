@@ -1,5 +1,5 @@
 import SaidBar from './SideBar'
-import { Bell, UsersRound } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import API from '../API/api';
