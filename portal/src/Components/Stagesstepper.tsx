@@ -26,24 +26,28 @@ const STATUS_STYLES = {
   },
 };
 
+type StageStatus = "completed" | "in_progress" | "not_started";
+
 interface Stage {
   id: string;
   project_id: string;
   name: string;
   position: number;
-  status: string;
+  status: StageStatus;
   created_at: string;
 }
 interface StageStepperProps {
   stages: Stage[];
-  onStageClick: (stage: Stage) => void;
+  currentStage: string
+  onStageClick: (id: string) => void;
 }
 
-export default function StageStepper({ stages, onStageClick }: StageStepperProps) {
+export default function StageStepper({ stages, currentStage, onStageClick }: StageStepperProps) {
 
   return (
     <div className="flex items-start overflow-x-auto py-4">
       {stages.map((stage, index) => {
+        const isActive = currentStage === stage.id;
         const styles = STATUS_STYLES[stage.status] || STATUS_STYLES.not_started;
         const isLast = index === stages.length - 1;
 
@@ -60,7 +64,9 @@ export default function StageStepper({ stages, onStageClick }: StageStepperProps
               <div
                 className={[
                   "flex h-8 w-8 items-center justify-center rounded-full text-sm shrink-0",
+
                   styles.circle,
+                  isActive && "ring-2 ring-indigo-500"
                 ].join(" ")}
               >
                 {/* Чекмарк для завершённых, номер этапа — для остальных */}
@@ -69,6 +75,7 @@ export default function StageStepper({ stages, onStageClick }: StageStepperProps
                 ) : (
                   index + 1
                 )}
+
               </div>
               <span className={["text-xs whitespace-nowrap", styles.label].join(" ")}>
                 {stage.name}

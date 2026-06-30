@@ -12,9 +12,20 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Trash2 } from 'lucide-react';
-
-
-export default function SortableStageRow({ stage, onNameChange, onDelete }) {
+interface Stage {
+  id: string;
+  project_id: string;
+  name: string;
+  position: number;
+  status: string;
+  created_at: string;
+}
+interface sortableProps {
+  stage: Stage;
+  onDelete: (id: string) => void
+  onNameChange: (stageId: string, newName: string) => void
+}
+export default function SortableStageRow({ stage, onNameChange, onDelete }: sortableProps) {
   const {
     attributes,   // ARIA-атрибуты для доступности (screen readers)
     listeners,    // обработчики событий мыши/тача — именно они "ловят" начало перетаскивания

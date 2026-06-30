@@ -713,6 +713,346 @@ app.include_router(stages_router)
 
 
 # =========================================================================
+# Pydantic SCHEMAS — Task
+# =========================================================================
+
+class TaskCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    assignee_id: Optional[str] = None
+
+
+class TaskUpdate(BaseModel):
+    """Все поля Optional — PATCH обновляет только переданное.
+    Статус сюда НЕ входит намеренно: статус задачи меняется только
+    через действия с Approval (send-for-approval/decide), а не прямым
+    PATCH — иначе можно было бы случайно поставить status='approved'
+    мимо реального согласования с клиентом."""
+    title: Optional[str] = None
+    description: Optional[str] = None
+    assignee_id: Optional[str] = None
+
+
+class TaskOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    stage_id: str
+    title: str
+    description: Optional[str] = None
+    assignee_id: Optional[str] = None
+    # Вложенный объект — НЕ просто assignee_id, а сразу полные данные
+    # пользователя (avatar_url, full_name), чтобы фронту не пришлось
+    # отдельным запросом дотягивать аватарку по id для каждой задачи.
+    # Optional, потому что assignee_id сам по себе nullable — задача
+    # может быть вообще без назначенного исполнителя.
+    assignee: Optional[UserOut] = None
+    status: str
+    position: int
+    created_at: datetime
+
+
+# =========================================================================
+# Pydantic SCHEMAS — Approval
+# =========================================================================
+
+class ApprovalDecision(BaseModel):
+    """Тело запроса, когда client жмёт Approve / Request Changes."""
+    status: str  # 'approved' | 'rejected'
+    decision_comment: Optional[str] = None  # имеет смысл заполнять при rejected
+
+
+class ApprovalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    task_id: str
+    round_number: int
+    status: str
+    submitted_by_user_id: Optional[str] = None
+    decided_by_user_id: Optional[str] = None
+    decision_comment: Optional[str] = None
+    submitted_at: datetime
+    decided_at: Optional[datetime] = None
+
+
+class TaskDetailOut(TaskOut):
+    """Для экрана Task Detail — сразу со всей историей раундов
+    согласования, чтобы фронту не делать отдельный запрос."""
+    approvals: List[ApprovalOut] = []
+
+
+# =========================================================================
+# РОУТЕР: /projects/{project_id}/stages/{stage_id}/tasks
+# =========================================================================
+
+tasks_router = APIRouter(
+    prefix="/projects/{project_id}/stages/{stage_id}/tasks", tags=["tasks"]
+)
+
+
+def _get_stage_or_404(project_id: str, stage_id: str, db: Session) -> Stage:
+    """Общая проверка: этап существует И принадлежит именно этому
+    проекту — без второй части проверки можно было бы случайно
+    обратиться к чужому этапу, зная только его id."""
+    stage = (
+        db.query(Stage)
+        .filter(Stage.id == stage_id, Stage.project_id == project_id)
+        .first()
+    )
+    if not stage:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Этап не найден")
+    return stage
+
+
+def _get_task_or_404(stage_id: str, task_id: str, db: Session) -> Task:
+    task = db.query(Task).filter(Task.id == task_id, Task.stage_id == stage_id).first()
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Задача не найдена")
+    return task
+
+
+@tasks_router.post("", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
+def create_task(
+    project_id: str,
+    stage_id: str,
+    payload: TaskCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("executor")),
+):
+    """Создание задачи — только executor (по твоему решению на этом
+    этапе). require_role("executor") вернёт 403 раньше, чем выполнится
+    хоть строчка этого кода, если зайдёт client."""
+    _get_stage_or_404(project_id, stage_id, db)
+
+    max_position = (
+        db.query(Task.position)
+        .filter(Task.stage_id == stage_id)
+        .order_by(Task.position.desc())
+        .first()
+    )
+    next_position = (max_position[0] + 1) if max_position else 0
+
+    task = Task(
+        stage_id=stage_id,
+        title=payload.title,
+        description=payload.description,
+        assignee_id=payload.assignee_id,
+        position=next_position,
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+@tasks_router.get("", response_model=List[TaskOut])
+def list_tasks(
+    project_id: str,
+    stage_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Список задач этапа — доступен и executor, и client (оба могут
+    смотреть), поэтому здесь обычный get_current_user, без require_role."""
+    _get_stage_or_404(project_id, stage_id, db)
+    tasks = (
+        db.query(Task)
+        .filter(Task.stage_id == stage_id)
+        .order_by(Task.position)
+        .all()
+    )
+    return tasks
+
+
+@tasks_router.get("/{task_id}", response_model=TaskDetailOut)
+def get_task(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Одна задача со всей историей раундов согласования — для
+    экрана Task Detail."""
+    _get_stage_or_404(project_id, stage_id, db)
+    task = _get_task_or_404(stage_id, task_id, db)
+    return task
+
+
+@tasks_router.patch("/{task_id}", response_model=TaskOut)
+def update_task(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    payload: TaskUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("executor")),
+):
+    """Редактирование задачи — только executor."""
+    _get_stage_or_404(project_id, stage_id, db)
+    task = _get_task_or_404(stage_id, task_id, db)
+
+    if payload.title is not None:
+        task.title = payload.title
+    if payload.description is not None:
+        task.description = payload.description
+    if payload.assignee_id is not None:
+        task.assignee_id = payload.assignee_id
+
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+@tasks_router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("executor")),
+):
+    """Удаление задачи — только executor. cascade в models.py удалит
+    вместе с ней все Approval, File, Comment, привязанные к ней."""
+    _get_stage_or_404(project_id, stage_id, db)
+    task = _get_task_or_404(stage_id, task_id, db)
+    db.delete(task)
+    db.commit()
+    return None
+
+
+# =========================================================================
+# Approval-эндпоинты — ядро бизнес-логики продукта
+# =========================================================================
+# Поток:
+#   1. executor отправляет задачу на согласование -> создаётся Approval
+#      со status='pending', round_number=1 (или +1, если это уже не
+#      первая попытка), task.status становится 'pending_approval'
+#   2. client принимает решение -> approved или rejected:
+#      - approved: task.status = 'approved', раунд закрывается
+#      - rejected: task.status = 'changes_requested', раунд закрывается,
+#        но задачу можно отправить на согласование СНОВА — это создаст
+#        новый Approval с round_number + 1
+
+
+@tasks_router.post(
+    "/{task_id}/approvals", response_model=ApprovalOut, status_code=status.HTTP_201_CREATED
+)
+def send_for_approval(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("executor")),
+):
+    """
+    'Отправить на согласование' — кнопка на стороне executor.
+
+    Защита от повторной отправки: если у задачи уже есть Approval со
+    status='pending', значит она уже ждёт решения клиента — отправлять
+    второй раз бессмысленно (и создало бы дубль raund_number,
+    нарушив UniqueConstraint в БД).
+    """
+    _get_stage_or_404(project_id, stage_id, db)
+    task = _get_task_or_404(stage_id, task_id, db)
+
+    existing_pending = (
+        db.query(Approval)
+        .filter(Approval.task_id == task_id, Approval.status == "pending")
+        .first()
+    )
+    if existing_pending:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Задача уже отправлена на согласование, ждём решения клиента",
+        )
+
+    max_round = (
+        db.query(Approval.round_number)
+        .filter(Approval.task_id == task_id)
+        .order_by(Approval.round_number.desc())
+        .first()
+    )
+    next_round = (max_round[0] + 1) if max_round else 1
+
+    approval = Approval(
+        task_id=task_id,
+        round_number=next_round,
+        status="pending",
+        submitted_by_user_id=current_user.id,
+    )
+    db.add(approval)
+
+    # task.status — это denormalized-кэш текущего состояния (см.
+    # объяснение в models.py/schema.sql), держим его синхронным
+    # с реальным состоянием в Approval.
+    task.status = "pending_approval"
+
+    db.commit()
+    db.refresh(approval)
+    return approval
+
+
+@tasks_router.post("/{task_id}/approvals/{approval_id}/decide", response_model=ApprovalOut)
+def decide_approval(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    approval_id: str,
+    payload: ApprovalDecision,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("client")),
+):
+    """
+    'Одобрить' / 'Отправить на доработку' — кнопки на стороне client.
+
+    require_role("client") — только заказчик может принимать решение,
+    executor сюда не должен иметь доступа (логично: нельзя самому
+    себе одобрить свою же работу).
+    """
+    if payload.status not in ("approved", "rejected"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="status должен быть 'approved' или 'rejected'",
+        )
+
+    _get_stage_or_404(project_id, stage_id, db)
+    task = _get_task_or_404(stage_id, task_id, db)
+
+    approval = (
+        db.query(Approval)
+        .filter(Approval.id == approval_id, Approval.task_id == task_id)
+        .first()
+    )
+    if not approval:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Раунд согласования не найден")
+
+    if approval.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="По этому раунду решение уже принято",
+        )
+
+    approval.status = payload.status
+    approval.decision_comment = payload.decision_comment
+    approval.decided_by_user_id = current_user.id
+    approval.decided_at = datetime.utcnow()
+
+    # Синхронизируем denormalized task.status с решением по раунду —
+    # 'approved' -> задача готова, 'rejected' -> задача возвращается
+    # executor'у на доработку (и может быть отправлена на новый раунд).
+    task.status = "approved" if payload.status == "approved" else "changes_requested"
+
+    db.commit()
+    db.refresh(approval)
+    return approval
+
+
+app.include_router(tasks_router)
+
+
+# =========================================================================
 # Создание таблиц при первом запуске
 # =========================================================================
 

@@ -2,6 +2,7 @@ import API from "../API/api"
 import { useState, useEffect } from "react"
 import Header from "../Components/Header"
 import axios from "axios"
+import { useNavigate } from "react-router-dom"
 // interface ProfileStat {
 //   value: string | number;
 //   label: string;
@@ -35,6 +36,7 @@ export default function ProfileCard() {
   const [email, setEmail] = useState("");
   const [avatarClick, setAvatarClick] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string>("")
+  const navigete = useNavigate()
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -78,7 +80,10 @@ export default function ProfileCard() {
     window.location.reload()
   }
 
-
+  async function logout() {
+    localStorage.removeItem('token')
+    navigete("/login")
+  }
 
   const stats = [
     { value: 12, label: "Projects" },
@@ -236,12 +241,18 @@ export default function ProfileCard() {
             </div>
 
             {/* Footer */}
-            <div className="mt-8 flex justify-end border-t border-gray-100 pt-6">
+            <div className="mt-8 flex gap-8 justify-end border-t border-gray-100 pt-6">
               <button
                 type="submit"
                 className="rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white hover:bg-indigo-700 transition-colors"
               >
                 Save changes
+              </button>
+              <button
+                onClick={() => logout()}
+                className="rounded-lg bg-red-500 px-5 py-2.5 font-semibold text-white hover:bg-indigo-700 transition-colors"
+              >
+                Выйти из аккаунта
               </button>
             </div>
           </form>
