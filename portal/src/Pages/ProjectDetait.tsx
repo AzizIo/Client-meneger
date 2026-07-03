@@ -4,6 +4,8 @@ import { useParams } from 'react-router-dom'
 import { Link, PenLine } from 'lucide-react';
 import Header from '../Components/Header';
 import StageStepper from '../Components/Stagesstepper';
+import { useAuth } from '../Context/AuthContext';
+import Tasks from '../Components/Tasks';
 import {
   DndContext,
   closestCenter,
@@ -66,11 +68,20 @@ interface Task {
   assignee_id: string;
   status: string;
   position: Number;
-  created_at: string
+  created_at: string;
+  assignee: {
+    id: string;
+    email: string;
+    full_name: string;
+    avatar_url: string;
+    role: string;
+    is_active: boolean;
+    created_at: string;
+  }
 }
 
 export default function ProjectDetait() {
-
+  const { me } = useAuth();
   const { projectId } = useParams()
   const [project, setProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,11 +90,13 @@ export default function ProjectDetait() {
   const [stages, setStages] = useState<Stage[]>([])
   const [isSaving, setIsSaving] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false)
-  const [currentStage, setCurrentStage] = useState<string>("")
+  const [currentStage, setCurrentStage] = useState<string>()
   const [taskName, setTaskName] = useState("")
   const [taskDisc, setTaskDisc] = useState("")
   const [tasks, setTasks] = useState<Task[]>([])
   const [assignee, setAssignee] = useState<string>()
+  const isExecutor = me?.role === 'executor';
+  const isClient = me?.role === 'client';
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
@@ -101,14 +114,26 @@ export default function ProjectDetait() {
 
   useEffect(() => {
     API.get(`/projects/${projectId}/stages`)
-      .then(res => setStages(res.data))
+      .then(res => {
+        setStages(res.data)
+        // Сразу выбираем первый этап как дефолтный —
+        // res.data[0] существует только если этапы вообще есть
+        if (res.data.length > 0) {
+          setCurrentStage(res.data[0].id)
+        }
+      }
+      )
       .catch(err => console.error(err))
   }, [projectId]);
   useEffect(() => {
+    // Защита: не делаем запрос пока currentStage ещё undefined
+    if (!currentStage) return;
+
     API.get(`/projects/${projectId}/stages/${currentStage}/tasks`)
       .then(res => setTasks(res.data))
       .catch(err => console.error(err))
   }, [currentStage])
+
   if (isLoading) return <div>Загрузка...</div>;
   if (!project) return <div>Проект не найден</div>;
 
@@ -120,6 +145,7 @@ export default function ProjectDetait() {
         description: taskDisc,
         assignee_id: assignee
       })
+      window.location.reload()
 
     }
     catch {
@@ -162,7 +188,16 @@ export default function ProjectDetait() {
       )
     );
   }
-
+  async function deleteTasks(id: string) {
+    try {
+      await API.delete(`/projects/${projectId}/stages/${currentStage}/tasks/${id}`);
+      window.location.reload()
+    } catch (err: any) {
+      console.log(err.response?.status);
+      console.log(err.response?.data);
+      console.log(err.response?.headers);
+    }
+  }
   async function handleSaveAll() {
     setIsSaving(true);
     try {
@@ -267,13 +302,15 @@ export default function ProjectDetait() {
               <div>
                 <div>
                   <div className='flex relative items-center justify-center gap-2 overflow-x-auto bg-zinc-100 mt-4 border border-gray-300 rounded-lg px-3 py-2 whitespace-nowrap'>
+                    {isExecutor && (
 
-                    <button
-                      onClick={() => setModal(true)}
-                      className='absolute top-2 right-4 text-gray-400 hover:text-gray-700'
-                    >
-                      <PenLine size={12} />
-                    </button>
+                      <button
+                        onClick={() => setModal(true)}
+                        className='absolute top-2 right-4 text-gray-400 hover:text-gray-700'
+                      >
+                        <PenLine size={12} />
+                      </button>
+                    )}
 
                     <StageStepper stages={stages} currentStage={currentStage} onStageClick={onStageClick} />
 
@@ -356,112 +393,12 @@ export default function ProjectDetait() {
                       </div>
                     )}
                   </div>
-                  <div>
-                    <div className='flex flex-col items-center justify-center ' >
-                    </div>
-                    {newTaskOpen && (
-                      <div
-                        className="fixed inset-0 bg-black/50 flex items-center justify-center"
-                        onClick={() => setNewTaskOpen(false)}
-                      >
-                        <div
-                          className="bg-white p-6 rounded-xl w-full max-w-md"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-
-                          <form onSubmit={createTask} className="flex flex-col gap-4 max-w-md">
-                            <div className="flex flex-col gap-2">
-                              <label htmlFor="task-input" className="text-sm font-medium text-gray-700">
-                                Название задачи
-                              </label>
-                              <input
-                                onChange={(e) => setTaskName(e.target.value)}
-                                id="task-input"
-                                type="text"
-                                placeholder='Дизайн главной страницы'
-                                className="w-full rounded-lg border border-gray-300 px-4 py-2 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                              />
-                            </div>
-                            <div className="flex flex-col gap-2">
-                              <label htmlFor="task-input" className="text-sm font-medium text-gray-700">
-                                Описание задачи
-                              </label>
-                              <input
-                                onChange={(e) => setTaskDisc(e.target.value)}
-                                id="task-input"
-                                type="text"
-                                placeholder='Заголовок, картинки и иконки'
-                                className="w-full rounded-lg border border-gray-300 px-4 py-2 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                              />
-                            </div>
-                            <div className="flex flex-col gap-2">
-                              <label htmlFor="task-input" className="text-sm font-medium text-gray-700">
-                                Айди исполнителя(опционально)
-                              </label>
-                              <input
-                                onChange={(e) => setAssignee(e.target.value)}
-                                id="task-input"
-                                type="text"
-                                placeholder='KSA-123S'
-                                className="w-full rounded-lg border border-gray-300 px-4 py-2 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                              />
-                            </div>
-                            <button
-                              type="submit"
-                              className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-700 active:scale-95"
-                            >
-                              Добавить
-                            </button>
-                          </form>
-
-
-                          <button
-                            onClick={() => setNewTaskOpen(false)}
-                            className="mt-4 bg-red-500 text-white px-4 py-2 rounded"
-                          >
-                            Закрыть
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    <div className='mt-8' >
-                      <div className='' >
-                        {tasks.map((task) => (
-
-                          <div className='' key={task.id} >
-
-                            <div >
-                              <div >
-                                <div className='bg-gray-100 py-2 pl-4 flex justify-between items-center rounded ' >
-                                  <div>
-                                    <h1 className='font-semibold ' >{task.title}</h1>
-                                    <p className='text-gray-500 text-sm' >{task.description}</p>
-                                  </div>
-
-                                  <div className='pr-4 flex items-center gap-4' >
-                                    <div className='text-gray-500 text-sm' >
-                                      {new Date(task.created_at).toLocaleDateString("ru-RU")}
-                                    </div>
-                                    <div className='bg-emerald-600/20 text-emerald-600 px-2 py-1 text-sm rounded-3xl ' >
-                                      {task.status}
-                                    </div>
-
-                                  </div>
-
-                                </div>
-                                <div onClick={() => setNewTaskOpen(true)} className="flex mt-4   text-center w-full">
-                                  <div className="w-full hover:bg-gray-100 border-2 py-4 border-dashed border-gray-300 text-gray-400 rounded-lg">
-                                    + Добавить новую задачу
-                                  </div>
-                                </div>
-
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                  <Tasks tasks={tasks} setNewTaskOpen={setNewTaskOpen} newTaskOpen={newTaskOpen} setTaskName={setTaskName} setTaskDisc={setTaskDisc} createTask={createTask} setAssignee={setAssignee} deleteTasks={deleteTasks} projectId={projectId}
+                    stageId={currentStage} onTaskUpdate={() => {
+                      API.get(`/projects/${projectId}/stages/${currentStage}/tasks`)
+                        .then(res => setTasks(res.data))
+                        .catch(err => console.error(err));
+                    }} />
                 </div>
               </div>
             </div>

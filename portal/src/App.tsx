@@ -5,6 +5,7 @@ import RegisterPage from './Pages/RegisterPage'
 import ProfilePage from './Pages/ProfilePage'
 import NewProjectPage from './Pages/NewProjectPage'
 import ProjectDetait from './Pages/ProjectDetait'
+import ProjectsPage from './Pages/ProjectsPage'
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/new-project" element={<NewProjectPage />} />
         <Route path="/projects/:projectId" element={<ProjectDetait />} />
+        <Route path="/projects" element={<ProjectsPage />} />
       </Routes>
 
     </BrowserRouter>
