@@ -1,23 +1,7 @@
-"""
-main.py
-=======
-Здесь два слоя + сама точка входа:
-
-  Pydantic SCHEMAS — форма данных в HTTP request/response. Аналог твоих
-  TS interface для API. Паттерн: {Entity}Create (что приходит) /
-  {Entity}Out (что уходит обратно, без password_hash и т.п.).
-
-  AUTH-эндпоинты — те же /auth/register и /auth/login, что были раньше,
-  адаптированные под новую модель: вместо отдельной регистрации
-  "агентства" и "клиента" — ОДИН эндпоинт регистрации с полем role
-  ('executor' | 'client'), как у тебя сделано на фронте.
-
-Запуск: uvicorn main:app --reload
-"""
 
 from datetime import datetime, timedelta
 from typing import Optional, List
-
+from sqlalchemy.orm import selectinload
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
@@ -25,7 +9,6 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, ConfigDict
 from jose import jwt, JWTError
 from passlib.context import CryptContext
-
 from database import Base, engine, get_db
 from models import User, Project, Stage, Task, Approval, File, Comment, ActivityLog, Notification
 
@@ -132,6 +115,15 @@ def require_role(*allowed_roles: str):
 # =========================================================================
 # Pydantic SCHEMAS — auth
 # =========================================================================
+class StageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    name: str
+    position: int
+    status: str
+    created_at: datetime
 
 class RegisterRequest(BaseModel):
     """То, что фронтенд отправляет на /auth/register. role выбирается
@@ -393,6 +385,9 @@ class ProjectDetailOut(ProjectOut):
     executor: UserOut
     client: UserOut
 
+class ProjectListOut(ProjectOut):
+    stages: List[StageOut] = []
+
 
 # =========================================================================
 # РОУТЕР: /projects
@@ -447,7 +442,7 @@ def create_project(
     return project
 
 
-@projects_router.get("", response_model=List[ProjectOut])
+@projects_router.get("", response_model=List[ProjectListOut])
 def list_projects(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -474,7 +469,12 @@ def list_projects(
     как Depends(get_current_user), то есть как проверка "доступ только
     для залогиненных", без влияния на сам результат запроса.
     """
-    projects = db.query(Project).order_by(Project.created_at.desc()).all()
+    projects = (
+    db.query(Project)
+    .options(selectinload(Project.stages))
+    .order_by(Project.created_at.desc())
+    .all()
+)
     return projects
 
 
@@ -529,15 +529,7 @@ class StageReorderRequest(BaseModel):
     stages: List[StageReorderItem]
 
 
-class StageOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
 
-    id: str
-    project_id: str
-    name: str
-    position: int
-    status: str
-    created_at: datetime
 
 
 # =========================================================================

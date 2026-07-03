@@ -49,7 +49,7 @@ export default function Header() {
           </div>
         </div>
       </header>
-      <hr className='w-full mb-2 border-gray-200' />
+      <hr className='w-full  border-gray-200' />
     </>
   )
 }

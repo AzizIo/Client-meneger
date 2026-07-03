@@ -2,7 +2,7 @@ import API from '../API/api'
 import Header from '../Components/Header'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-
+import StageStepper from '../Components/Stagesstepper'
 
 interface User {
   id: string;
@@ -21,6 +21,7 @@ interface Project {
   description: string;
   status: string;
   is_archived: boolean
+  stages: object
 }
 export default function MainPage() {
   const [me, setMe] = useState<User | null>(null)
@@ -39,74 +40,117 @@ export default function MainPage() {
 
   return (
     <>
-      <div className='' >
+      <div className=' bg-gray-50' >
         <Header />
-        <div className='container mx-auto py-8'>
-          <h1 className='text-3xl font-bold mb-4'>Добро пожаловать, {me ? me.full_name : '...'}</h1>
-          <p className='text-gray-700 text-lg'>Это главная страница вашего портала. Здесь вы можете управлять своими проектами, задачами и общаться с командой.</p>
-        </div>
+        <main className='container  min-h-screen mx-auto px-6 py-8 space-y-10' >
+          <section>
+            <h1 className="text-3xl font-bold">
+              Добро пожаловать, {me ? me.full_name : "..."}
+            </h1>
 
-        <div className='container mx-auto py-8'>
-          <h1>Статистика проектов</h1>
-          <div className='flex gap-4 mt-4'>
-            <div className='bg-amber-50 p-4 flex flex-col gap-4  rounded-lg shadow-md text-gray-700 text-sm'>
-              <p>
-                Общее количество проектов
-              </p>flex flex-col gap-4
-              <p className='text-black text-2xl font-bold'>
+            <p className="mt-2 text-gray-600 max-w-3xl">
+              Это главная страница вашего портала. Здесь вы можете управлять
+              проектами, задачами и отслеживать ход выполнения.
+            </p>
+          </section>
 
-                {projects.length}
-              </p>
+          <section>
+            <h1 className='text-2xl font-semibold mb-6' >Статистика проектов</h1>
+            <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6'>
+              <div className='rounded-xl  bg-white p-6 shadow-sm min-h-36 flex flex-col justify-between'>
+                <p>
+                  Общее количество проектов
+                </p>
+                <p className='text-black text-2xl font-bold'>
+
+                  {projects.length}
+                </p>
+              </div>
+              <div className='rounded-xl  bg-white p-6 shadow-sm min-h-36 flex flex-col justify-between'>
+                <p >
+                  Активные проекты
+                </p>
+                <p className='text-black text-2xl font-bold' >
+
+                  {projects.filter(p => p.status === 'active').length}
+                </p>
+              </div>
+              <div className='rounded-xl  bg-white p-6 shadow-sm min-h-36 flex flex-col justify-between'>
+                <p>
+                  Завершенные проекты
+                </p>
+                <p className='text-black text-2xl font-bold' >
+
+                  {projects.filter(p => p.status === 'completed').length}
+                </p>
+              </div>
+              <div className='rounded-xl  bg-white p-6 shadow-sm min-h-36 flex flex-col justify-between'>
+                <p>
+                  В ожидании
+                </p>
+                <p className='text-black text-2xl font-bold' >
+                  {projects.filter(p => p.status === 'on_hold').length}
+
+                </p>
+              </div>
+
             </div>
-            <div className='bg-amber-50 p-4 flex flex-col gap-4 rounded-lg shadow-md text-gray-700'>
-              <p >
-                Активные проекты
-              </p>
-              <p className='text-black text-2xl font-bold' >
 
-                {projects.filter(p => p.status === 'active').length}
-              </p>
+          </section>
+
+
+          <section>
+            <div className='flex items-center justify-between mb-6' >
+
+              <h2 className='text-2xl font-semibold mb-4'>Ваши проекты</h2>
             </div>
-            <div className='bg-amber-50 p-4 rounded-lg flex flex-col gap-4  shadow-md text-gray-700'>
-              <p>
-                Завершенные проекты
-              </p>
-              <p className='text-black text-2xl font-bold' >
-
-                {projects.filter(p => p.status === 'completed').length}
-              </p>
-            </div>
-            <div className='bg-amber-50 p-4 rounded-lg flex flex-col gap-4  shadow-md text-gray-700'>
-              <p>
-                В ожидании
-              </p>
-              <p className='text-black text-2xl font-bold' >
-                {projects.filter(p => p.status === 'on_hold').length}
-
-              </p>
-            </div>
-
-          </div>
-
-        </div>
-        <div>
-          <div className='container mx-auto py-8'>
-            <h2 className='text-2xl font-semibold mb-4'>Ваши проекты</h2>
-            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
+            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
               {projects.map(project => (
-                <Link key={project.id} to={`/projects/${project.id}`}>
-                  <div key={project.id} className='bg-white p-4 rounded-lg shadow-md'>
-                    <h3 className='text-xl font-semibold mb-2'>{project.name}</h3>
-                    <p className='text-gray-600'>{project.description}</p>
-                    <p>{project.status}</p>
-                  </div>
-                </Link>
+                <>
+                  <Link className='h-full' key={project.id} to={`/projects/${project.id}`}>
+                    <div className=' h-full rounded-xl  border-indigo-500 border-0.5  bg-white shadow-sm hover:shadow-lg transition-all duration-200 p-6 flex flex-col' >
+                      <div className='flex justify-between' >
+
+                        <div className="flex-1 space-y-1">
+                          <div>
+                            <h3 className="text-xl font-semibold">
+                              {project.name}
+                            </h3>
+
+                            <p className=" text-gray-600 ">
+                              {project.description}
+                            </p>
+                          </div>
+
+
+                        </div>
+                        <div>
+                          <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-sm font-medium">
+                            {project.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="">
+                        <StageStepper
+                          stages={project.stages}
+                          currentStage={
+                            project.stages.find(
+                              s => s.status === "in_progress"
+                            )?.id
+                          }
+                          compact
+                        />
+                      </div>
+                    </div>
+                  </Link>
+                </>
               ))}
             </div>
 
 
-          </div>
-        </div>
+          </section>
+        </main>
       </div>
 
     </>

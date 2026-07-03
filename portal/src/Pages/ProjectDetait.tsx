@@ -96,7 +96,6 @@ export default function ProjectDetait() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [assignee, setAssignee] = useState<string>()
   const isExecutor = me?.role === 'executor';
-  const isClient = me?.role === 'client';
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },

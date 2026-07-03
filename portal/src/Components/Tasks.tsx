@@ -47,7 +47,6 @@ export default function Tasks({
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [currentTask, setCurrentTask] = useState<Task | null>(null);
   const pendingApproval =
     selectedTask?.approvals?.find(a => a.status === 'pending');
   const history =
@@ -193,7 +192,7 @@ export default function Tasks({
               <div className="mt-6">
                 <h1 className="text-2xl flex justify-center font-bold">Управление задачами</h1>
                 <div className="mt-4">
-                  {tasks.map((task) => (
+                  {tasks.map((task: Task) => (
                     <div className="flex justify-between" key={task.id}>
                       <div>{task.title}</div>
                       <button onClick={() => deleteTasks(task.id)}>Удалить</button>
@@ -214,7 +213,7 @@ export default function Tasks({
 
         <div className="mt-8">
           <div className="flex flex-col gap-4">
-            {tasks.map((task) => (
+            {tasks.map((task: Task) => (
               <div key={task.id}>
                 <div
                   onClick={() => handleOpen(task)}
@@ -243,7 +242,7 @@ export default function Tasks({
                 <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
 
                 {/* Меню справа */}
-                <div className="absolute right-0 top-0 h-full w-[480px] bg-white shadow-xl overflow-y-auto">
+                <div className="absolute right-0 top-0 h-full  bg-white shadow-xl overflow-y-auto">
                   <div className="p-6">
                     {/* Заголовок */}
                     <div className="mb-4">

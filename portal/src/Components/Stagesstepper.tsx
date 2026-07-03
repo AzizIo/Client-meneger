@@ -40,9 +40,12 @@ interface StageStepperProps {
   stages: Stage[];
   currentStage: string
   onStageClick: (id: string) => void;
+  compact?: boolean;
 }
 
-export default function StageStepper({ stages, currentStage, onStageClick }: StageStepperProps) {
+export default function StageStepper({ stages, currentStage, onStageClick, compact = false }: StageStepperProps) {
+  const circleSize = compact ? "h-6 w-6 text-xs" : "h-8 w-8 text-sm";
+  const lineWidth = compact ? "w-8" : "w-12 sm:w-20";
 
   return (
     <div className="flex items-start overflow-x-auto py-4">
@@ -59,14 +62,17 @@ export default function StageStepper({ stages, currentStage, onStageClick }: Sta
             {/* Один "узел" степпера: кружок + название под ним */}
             <button
               onClick={() => onStageClick?.(stage.id)}
-              className="flex flex-col items-center gap-2 px-2"
+              className={[
+                "flex flex-col items-center",
+                compact ? "px-1" : "gap-2 px-2",
+              ].join(" ")}
             >
               <div
                 className={[
-                  "flex h-8 w-8 items-center justify-center rounded-full text-sm shrink-0",
-
+                  "flex items-center justify-center rounded-full shrink-0",
+                  circleSize,
                   styles.circle,
-                  isActive && "ring-2 ring-indigo-500"
+                  isActive && "ring-2 ring-indigo-500",
                 ].join(" ")}
               >
                 {/* Чекмарк для завершённых, номер этапа — для остальных */}
@@ -77,9 +83,13 @@ export default function StageStepper({ stages, currentStage, onStageClick }: Sta
                 )}
 
               </div>
-              <span className={["text-xs whitespace-nowrap", styles.label].join(" ")}>
-                {stage.name}
-              </span>
+              {!compact && (
+                <span
+                  className={["text-xs whitespace-nowrap", styles.label].join(" ")}
+                >
+                  {stage.name}
+                </span>
+              )}
             </button>
 
             {/* Линия между текущим и следующим этапом — не рисуется
@@ -88,7 +98,14 @@ export default function StageStepper({ stages, currentStage, onStageClick }: Sta
                 если ещё нет — серая (это и даёт визуальный эффект
                 "прогресс заливается слева направо"). */}
             {!isLast && (
-              <div className={["h-0.5 w-12 sm:w-20 -mt-6", styles.line].join(" ")} />
+              <div
+                className={[
+                  "h-0.5",
+                  lineWidth,
+                  compact ? "" : "-mt-6",
+                  styles.line,
+                ].join(" ")}
+              />
             )}
           </div>
         );
