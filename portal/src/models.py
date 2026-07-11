@@ -165,6 +165,7 @@ class Stage(Base):
         "Task", back_populates="stage", cascade="all, delete-orphan",
         order_by="Task.position",
     )
+    files = relationship("File", back_populates="stage", cascade="all, delete-orphan")
 
 
 class Task(Base):
@@ -237,13 +238,16 @@ class Approval(Base):
 
 
 class File(Base):
-    """Файл — привязан либо к Task (общий файл задачи), либо к Approval
-    (версия, отправленная на конкретный раунд согласования). Ровно
-    одно из task_id/approval_id должно быть заполнено — это проверяется
+    """Файл — привязан к одному из трёх родителей:
+    - stage_id: общий файл этапа (вкладка Files на уровне этапа)
+    - task_id: файл конкретной задачи (боковая панель задачи)
+    - approval_id: версия файла для конкретного раунда согласования
+    Ровно одно из трёх полей должно быть заполнено — проверяется
     в коде эндпоинта, не в БД."""
     __tablename__ = "file"
 
     id = Column(String, primary_key=True, default=generate_uuid)
+    stage_id = Column(String, ForeignKey("stage.id", ondelete="CASCADE"), nullable=True)
     task_id = Column(String, ForeignKey("task.id", ondelete="CASCADE"), nullable=True)
     approval_id = Column(String, ForeignKey("approval.id", ondelete="CASCADE"), nullable=True)
     uploaded_by_user_id = Column(String, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
@@ -253,6 +257,7 @@ class File(Base):
     mime_type = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    stage = relationship("Stage", back_populates="files")
     task = relationship("Task", back_populates="files")
     approval = relationship("Approval", back_populates="files")
 

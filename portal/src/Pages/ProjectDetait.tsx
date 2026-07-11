@@ -6,6 +6,7 @@ import Header from '../Components/Header';
 import StageStepper from '../Components/Stagesstepper';
 import { useAuth } from '../Context/AuthContext';
 import Tasks from '../Components/Tasks';
+import Files from '../Components/Files'
 import {
   DndContext,
   closestCenter,
@@ -95,8 +96,17 @@ export default function ProjectDetait() {
   const [taskDisc, setTaskDisc] = useState("")
   const [tasks, setTasks] = useState<Task[]>([])
   const [assignee, setAssignee] = useState<string>()
+  const [whoOpen, setWhoOpen] = useState<'tasks' | 'files'>('tasks');
   const isExecutor = me?.role === 'executor';
+  // переменная хранит в себе все пути чтобы в пропсы передовать только одно занчение
+  const stageFilesEndpoints = {
+    list: `/projects/${projectId}/stages/${currentStage}/files`,
+    upload: `/projects/${projectId}/stages/${currentStage}/files`,
+    download: `/projects/${projectId}/stages/${currentStage}/files`,
+    remove: `/projects/${projectId}/stages/${currentStage}/files`,
+  }
   const sensors = useSensors(
+
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     })
@@ -269,7 +279,7 @@ export default function ProjectDetait() {
   return (
     <>
       <Header />
-      <div>
+      <div className='bg-gray-50' >
         <div>
           <div className='container px-2 mx-auto py-8 flex justify-between'>
             <div>
@@ -392,12 +402,58 @@ export default function ProjectDetait() {
                       </div>
                     )}
                   </div>
-                  <Tasks tasks={tasks} setNewTaskOpen={setNewTaskOpen} newTaskOpen={newTaskOpen} setTaskName={setTaskName} setTaskDisc={setTaskDisc} createTask={createTask} setAssignee={setAssignee} deleteTasks={deleteTasks} projectId={projectId}
-                    stageId={currentStage} onTaskUpdate={() => {
-                      API.get(`/projects/${projectId}/stages/${currentStage}/tasks`)
-                        .then(res => setTasks(res.data))
-                        .catch(err => console.error(err));
-                    }} />
+                  <div className="border-b mt-4 border-gray-200 mb-4">
+                    <div className="flex gap-8">
+                      <button
+                        onClick={() => setWhoOpen('tasks')}
+                        className={`pb-3 text-lg font-medium transition ${whoOpen === 'tasks'
+                          ? 'text-indigo-600 border-b-2 border-indigo-600'
+                          : 'text-gray-500 hover:text-gray-700'
+                          }`}
+                      >
+                        Tasks
+                      </button>
+
+                      <button
+                        onClick={() => setWhoOpen('files')}
+                        className={`pb-3 text-lg font-medium transition ${whoOpen === 'files'
+                          ? 'text-indigo-600 border-b-2 border-indigo-600'
+                          : 'text-gray-500 hover:text-gray-700'
+                          }`}
+                      >
+                        Files
+                      </button>
+                    </div>
+                  </div>
+                  {whoOpen === 'tasks' ? (
+                    <>
+
+
+                      <Tasks
+                        tasks={tasks}
+                        setNewTaskOpen={setNewTaskOpen}
+                        newTaskOpen={newTaskOpen}
+                        setTaskName={setTaskName}
+                        setTaskDisc={setTaskDisc}
+                        createTask={createTask}
+                        setAssignee={setAssignee}
+                        deleteTasks={deleteTasks}
+                        projectId={projectId}
+                        stageId={currentStage}
+                        onTaskUpdate={() => {
+                          API.get(`/projects/${projectId}/stages/${currentStage}/tasks`)
+                            .then(res => setTasks(res.data))
+                            .catch(err => console.error(err));
+                        }}
+                      />
+                    </>
+                  ) : (
+                    // {{/* функция для добовления задачи, для двух вариантов реализованно разыне запросы поэтому пришлось в рочную передавать URL  */}}
+                    <Files
+                      endpoints={stageFilesEndpoints}
+                    />
+
+                  )}
                 </div>
               </div>
             </div>

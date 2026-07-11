@@ -2,6 +2,7 @@ import { Trash2, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import API from '../API/api'
 import { useAuth } from '../Context/AuthContext';
+import Files from './Files';
 interface Assignee {
   avatar_url: string | null;
   full_name: string;
@@ -47,6 +48,12 @@ export default function Tasks({
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const taskFilesEndpoints = {
+    list: `/projects/${projectId}/stages/${stageId}/tasks/${selectedTask?.id}/files`,
+    upload: `/projects/${projectId}/stages/${stageId}/tasks/${selectedTask?.id}/files`,
+    download: `/projects/${projectId}/stages/${stageId}/tasks/${selectedTask?.id}/files`,
+    remove: `/projects/${projectId}/stages/${stageId}/tasks/${selectedTask?.id}/files`,
+  }
   const pendingApproval =
     selectedTask?.approvals?.find(a => a.status === 'pending');
   const history =
@@ -84,7 +91,19 @@ export default function Tasks({
 
 
   async function SendAprove() {
-    await API.post(`/projects/${projectId}/stages/${stageId}/tasks/${selectedTask?.id}/approvals`)
+    try {
+      await API.post(`/projects/${projectId}/stages/${stageId}/tasks/${selectedTask?.id}/approvals`);
+      // Перезапрашиваем чтобы увидеть новый approval в selectedTask
+      const response = await API.get(`/projects/${projectId}/stages/${stageId}/tasks/${selectedTask?.id}`);
+      setSelectedTask(response.data);
+      onTaskUpdate();
+    } catch (err: any) {
+      if (err.response?.status === 409) {
+        alert('Задача уже отправлена на согласование');
+      } else {
+        alert('Ошибка при отправке');
+      }
+    }
   }
 
   const handleEditToggle = () => {
@@ -134,7 +153,6 @@ export default function Tasks({
     <>
       <div>
         <div className="flex flex-col items-center justify-center"></div>
-
         {newTaskOpen && (
           <div
             className="fixed inset-0 bg-black/50 flex items-center justify-center"
@@ -355,26 +373,53 @@ export default function Tasks({
                     {me?.role === 'executor' && (
                       <div className="mt-8 flex flex-col gap-4">
 
-                        <button onClick={() => SendAprove()} className="w-full mt-8  bg-green-500 text-white font-medium py-3 rounded-lg hover:bg-green-600 transition">
-                          Отправить на согласование
-                        </button>
-                        <div>
+
+                        {/* функция для добовления задачи, для двух вариантов реализованно разыне запросы поэтому пришлось в рочную передавать URL  */}
+                        {/* Файлы задачи */}
+                        <Files endpoints={taskFilesEndpoints} />
+
+                        {/* Отправка на согласование */}
+                        {!pendingApproval ? (
+                          <button
+                            onClick={SendAprove}
+                            className="w-full bg-green-500 text-white px-4 py-3 rounded-lg hover:bg-green-600 transition"
+                          >
+                            Отправить на согласование
+                          </button>
+                        ) : (
+                          <div className="rounded-lg bg-yellow-100 border border-yellow-300 p-3 text-center text-yellow-800">
+                            ⏳ Работа отправлена заказчику и ожидает решения
+                          </div>
+                        )}
+
+                        {/* История */}
+                        <div className="flex flex-col gap-2">
                           {history.map(a => (
-                            <div key={a.id} className="flex flex-col gap-4 rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                            <div
+                              key={a.id}
+                              className="rounded-lg bg-gray-50 px-3 py-2 text-sm"
+                            >
                               <div className="flex items-center gap-2">
-                                <span>Версия {a.round_number}:</span>
-                                {a.status === 'approved'
-                                  ? <span className="text-green-600 font-medium">✅ Одобрено</span>
-                                  : <span className="text-red-500 font-medium">❌ Отклонено</span>
-                                }
+                                <span>Версия {a.round_number}</span>
+
+                                {a.status === "approved" ? (
+                                  <span className="text-green-600 font-medium">
+                                    ✅ Одобрено
+                                  </span>
+                                ) : (
+                                  <span className="text-red-500 font-medium">
+                                    ❌ Отклонено
+                                  </span>
+                                )}
                               </div>
+
                               {a.decision_comment && (
-                                <p className="text-gray-500">{a.decision_comment}</p>
+                                <p className="mt-1 text-gray-500">
+                                  {a.decision_comment}
+                                </p>
                               )}
                             </div>
                           ))}
-
-
                         </div>
                       </div>
                     )}
@@ -410,6 +455,12 @@ export default function Tasks({
                             <p className="text-gray-600 font-semibold text-sm">
                               Версия {pendingApproval.round_number} ожидает вашего решения:
                             </p>
+                            {pendingApproval && (
+                              <>
+                                <Files endpoints={taskFilesEndpoints} />
+
+                              </>
+                            )}
                             <button
                               onClick={() => decide(pendingApproval.id, 'approved')}
                               className="w-full bg-green-500 text-white font-medium py-3 rounded-lg hover:bg-green-600 transition"

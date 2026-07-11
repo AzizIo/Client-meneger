@@ -131,17 +131,15 @@ export default function MainPage() {
                         </div>
                       </div>
 
-                      <div className="">
-                        <StageStepper
-                          stages={project.stages}
-                          currentStage={
-                            project.stages.find(
-                              s => s.status === "in_progress"
-                            )?.id
-                          }
-                          compact
-                        />
-                      </div>
+                      <StageStepper
+                        stages={project?.stages ?? []}
+                        currentStage={
+                          project?.stages?.find(
+                            s => s.status === "in_progress"
+                          )?.id
+                        }
+                        compact
+                      />
                     </div>
                   </Link>
                 </>

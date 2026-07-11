@@ -1,7 +1,28 @@
+"""
+main.py
+=======
+Здесь два слоя + сама точка входа:
+
+  Pydantic SCHEMAS — форма данных в HTTP request/response. Аналог твоих
+  TS interface для API. Паттерн: {Entity}Create (что приходит) /
+  {Entity}Out (что уходит обратно, без password_hash и т.п.).
+
+  AUTH-эндпоинты — те же /auth/register и /auth/login, что были раньше,
+  адаптированные под новую модель: вместо отдельной регистрации
+  "агентства" и "клиента" — ОДИН эндпоинт регистрации с полем role
+  ('executor' | 'client'), как у тебя сделано на фронте.
+
+Запуск: uvicorn main:app --reload
+"""
 
 from datetime import datetime, timedelta
 from typing import Optional, List
-from sqlalchemy.orm import selectinload
+import os
+import uuid
+import shutil
+from pathlib import Path
+from fastapi import UploadFile, File as FastAPIFile
+
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
@@ -9,6 +30,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, ConfigDict
 from jose import jwt, JWTError
 from passlib.context import CryptContext
+
 from database import Base, engine, get_db
 from models import User, Project, Stage, Task, Approval, File, Comment, ActivityLog, Notification
 
@@ -115,15 +137,6 @@ def require_role(*allowed_roles: str):
 # =========================================================================
 # Pydantic SCHEMAS — auth
 # =========================================================================
-class StageOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    project_id: str
-    name: str
-    position: int
-    status: str
-    created_at: datetime
 
 class RegisterRequest(BaseModel):
     """То, что фронтенд отправляет на /auth/register. role выбирается
@@ -385,9 +398,6 @@ class ProjectDetailOut(ProjectOut):
     executor: UserOut
     client: UserOut
 
-class ProjectListOut(ProjectOut):
-    stages: List[StageOut] = []
-
 
 # =========================================================================
 # РОУТЕР: /projects
@@ -442,7 +452,7 @@ def create_project(
     return project
 
 
-@projects_router.get("", response_model=List[ProjectListOut])
+@projects_router.get("", response_model=List[ProjectOut])
 def list_projects(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -469,12 +479,7 @@ def list_projects(
     как Depends(get_current_user), то есть как проверка "доступ только
     для залогиненных", без влияния на сам результат запроса.
     """
-    projects = (
-    db.query(Project)
-    .options(selectinload(Project.stages))
-    .order_by(Project.created_at.desc())
-    .all()
-)
+    projects = db.query(Project).order_by(Project.created_at.desc()).all()
     return projects
 
 
@@ -529,7 +534,15 @@ class StageReorderRequest(BaseModel):
     stages: List[StageReorderItem]
 
 
+class StageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
+    id: str
+    project_id: str
+    name: str
+    position: int
+    status: str
+    created_at: datetime
 
 
 # =========================================================================
@@ -1042,6 +1055,513 @@ def decide_approval(
 
 
 app.include_router(tasks_router)
+
+
+# =========================================================================
+# FILE — загрузка и получение файлов
+# =========================================================================
+# Файлы хранятся на диске в папке uploads/.
+# В БД хранится только путь к файлу (file_url) — сам файл в БД не кладём.
+#
+# Структура папок на диске:
+#   uploads/tasks/{task_id}/           <- файлы задачи
+#   uploads/approvals/{approval_id}/   <- файлы конкретного раунда
+#
+# Разделение по папкам важно — так легче найти все файлы конкретной
+# задачи или раунда, и легче удалить их при удалении родителя.
+
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)  # создать папку если её нет
+
+# Разрешённые типы файлов — защита от загрузки исполняемых файлов.
+# Расширяй по необходимости, но не убирай эту проверку совсем.
+ALLOWED_MIME_TYPES = {
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/plain",
+    "application/zip",
+}
+
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+class FileOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    task_id: Optional[str] = None
+    approval_id: Optional[str] = None
+    uploaded_by_user_id: Optional[str] = None
+    file_name: str
+    file_url: str
+    file_size_bytes: Optional[int] = None
+    mime_type: Optional[str] = None
+    created_at: datetime
+
+
+files_router = APIRouter(
+    prefix="/projects/{project_id}/stages/{stage_id}/tasks/{task_id}",
+    tags=["files"],
+)
+
+
+@files_router.post("/files", response_model=FileOut, status_code=status.HTTP_201_CREATED)
+async def upload_file_to_task(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    file: UploadFile = FastAPIFile(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Загрузить файл к задаче (не к конкретному раунду, а к задаче целиком).
+    Используется для общих файлов: брифов, референсов, исходников.
+
+    Принимает multipart/form-data — не JSON!
+    На фронте нужно использовать FormData:
+
+        const form = new FormData();
+        form.append('file', fileInput.files[0]);
+        await API.post(`/projects/.../tasks/${taskId}/files`, form, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+    """
+    _get_stage_or_404(project_id, stage_id, db)
+    _get_task_or_404(stage_id, task_id, db)
+
+    # Проверяем тип файла
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Тип файла не поддерживается: {file.content_type}",
+        )
+
+    # Читаем файл в память чтобы проверить размер
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Файл слишком большой. Максимум {MAX_FILE_SIZE // (1024*1024)} MB",
+        )
+
+    # Создаём папку для задачи и сохраняем файл с уникальным именем.
+    # uuid4() в имени файла защищает от коллизий (два файла с одинаковым
+    # именем не перезапишут друг друга) и от path traversal атак
+    # (злоумышленник не может загрузить файл с именем "../../важный_файл").
+    task_upload_dir = UPLOAD_DIR / "tasks" / task_id
+    task_upload_dir.mkdir(parents=True, exist_ok=True)
+
+    file_ext = Path(file.filename).suffix  # ".jpg", ".pdf" и т.п.
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = task_upload_dir / unique_filename
+
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    # Сохраняем запись в БД — только путь, не сам файл
+    db_file = File(
+        task_id=task_id,
+        uploaded_by_user_id=current_user.id,
+        file_name=file.filename,       # оригинальное имя для отображения
+        file_url=str(file_path),       # путь на диске для скачивания
+        file_size_bytes=len(content),
+        mime_type=file.content_type,
+    )
+    db.add(db_file)
+    db.commit()
+    db.refresh(db_file)
+    return db_file
+
+
+@files_router.post(
+    "/approvals/{approval_id}/files",
+    response_model=FileOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_file_to_approval(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    approval_id: str,
+    file: UploadFile = FastAPIFile(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("executor")),
+):
+    """
+    Загрузить файл к конкретному раунду согласования.
+    Используется для отправки версий работы (v1, v2, v3...).
+    Только executor может загружать файлы к раунду.
+    """
+    _get_stage_or_404(project_id, stage_id, db)
+    _get_task_or_404(stage_id, task_id, db)
+
+    approval = (
+        db.query(Approval)
+        .filter(Approval.id == approval_id, Approval.task_id == task_id)
+        .first()
+    )
+    if not approval:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Раунд не найден")
+
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Тип файла не поддерживается: {file.content_type}",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Файл слишком большой. Максимум {MAX_FILE_SIZE // (1024*1024)} MB",
+        )
+
+    approval_upload_dir = UPLOAD_DIR / "approvals" / approval_id
+    approval_upload_dir.mkdir(parents=True, exist_ok=True)
+
+    file_ext = Path(file.filename).suffix
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = approval_upload_dir / unique_filename
+
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    db_file = File(
+        approval_id=approval_id,
+        uploaded_by_user_id=current_user.id,
+        file_name=file.filename,
+        file_url=str(file_path),
+        file_size_bytes=len(content),
+        mime_type=file.content_type,
+    )
+    db.add(db_file)
+    db.commit()
+    db.refresh(db_file)
+    return db_file
+
+
+@files_router.get("/approvals/{approval_id}/files", response_model=List[FileOut])
+def list_approval_files(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    approval_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Список файлов конкретного раунда согласования."""
+    _get_stage_or_404(project_id, stage_id, db)
+    _get_task_or_404(stage_id, task_id, db)
+
+    files = (
+        db.query(File)
+        .filter(File.approval_id == approval_id)
+        .order_by(File.created_at.desc())
+        .all()
+    )
+    return files
+
+
+@files_router.delete(
+    "/approvals/{approval_id}/files/{file_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_approval_file(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    approval_id: str,
+    file_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("executor")),
+):
+    """Удалить файл раунда — только executor."""
+    db_file = (
+        db.query(File)
+        .filter(File.id == file_id, File.approval_id == approval_id)
+        .first()
+    )
+    if not db_file:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Файл не найден")
+
+    file_path = Path(db_file.file_url)
+    if file_path.exists():
+        file_path.unlink()
+
+    db.delete(db_file)
+    db.commit()
+    return None
+
+
+@files_router.get("/approvals/{approval_id}/files/{file_id}/download")
+def download_approval_file(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    approval_id: str,
+    file_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Скачать файл раунда."""
+    db_file = (
+        db.query(File)
+        .filter(File.id == file_id, File.approval_id == approval_id)
+        .first()
+    )
+    if not db_file:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Файл не найден")
+
+    file_path = Path(db_file.file_url)
+    if not file_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Файл не найден на диске")
+
+    return FileResponse(path=file_path, filename=db_file.file_name, media_type=db_file.mime_type)
+
+
+@files_router.get("/files", response_model=List[FileOut])
+def list_task_files(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Список всех файлов задачи (без файлов конкретных раундов)."""
+    _get_stage_or_404(project_id, stage_id, db)
+    _get_task_or_404(stage_id, task_id, db)
+
+    files = (
+        db.query(File)
+        .filter(File.task_id == task_id)
+        .order_by(File.created_at.desc())
+        .all()
+    )
+    return files
+
+
+@files_router.delete("/files/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_file(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    file_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Удалить файл — из БД и с диска.
+    Важно удалять и там, и там: если удалить только из БД, файл
+    останется на диске и будет занимать место. Если только с диска —
+    в БД будет "битая" ссылка.
+    """
+    db_file = (
+        db.query(File)
+        .filter(File.id == file_id, File.task_id == task_id)
+        .first()
+    )
+    if not db_file:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Файл не найден")
+
+    # Удаляем с диска если файл там ещё есть
+    file_path = Path(db_file.file_url)
+    if file_path.exists():
+        file_path.unlink()  # unlink = удалить файл (не папку)
+
+    db.delete(db_file)
+    db.commit()
+    return None
+
+
+# Отдаём файл для скачивания — FastAPI сам поставит правильные заголовки
+from fastapi.responses import FileResponse
+
+@files_router.get("/files/{file_id}/download")
+def download_file(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    file_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Скачать файл. Возвращает сам файл, а не JSON.
+    На фронте используй как href ссылку или через window.open().
+    """
+    db_file = (
+        db.query(File)
+        .filter(File.id == file_id, File.task_id == task_id)
+        .first()
+    )
+    if not db_file:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Файл не найден")
+
+    file_path = Path(db_file.file_url)
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Файл не найден на диске",
+        )
+
+    return FileResponse(
+        path=file_path,
+        filename=db_file.file_name,   # оригинальное имя при скачивании
+        media_type=db_file.mime_type,
+    )
+
+
+app.include_router(files_router)
+
+
+# =========================================================================
+# Файлы на уровне Stage — привязаны напрямую к stage_id
+# =========================================================================
+
+stage_files_router = APIRouter(
+    prefix="/projects/{project_id}/stages/{stage_id}/files",
+    tags=["files"],
+)
+
+
+@stage_files_router.post("", response_model=FileOut, status_code=status.HTTP_201_CREATED)
+async def upload_file_to_stage(
+    project_id: str,
+    stage_id: str,
+    file: UploadFile = FastAPIFile(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Загрузить файл к этапу — для вкладки Files на уровне Stage.
+    Эти файлы не привязаны к конкретной задаче, это общие файлы этапа
+    (например, общий бриф на весь дизайн-этап, референсы и т.п.).
+    """
+    _get_project_or_404(project_id, db)
+    stage = (
+        db.query(Stage)
+        .filter(Stage.id == stage_id, Stage.project_id == project_id)
+        .first()
+    )
+    if not stage:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Этап не найден")
+
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Тип файла не поддерживается: {file.content_type}",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Файл слишком большой. Максимум {MAX_FILE_SIZE // (1024*1024)} MB",
+        )
+
+    stage_upload_dir = UPLOAD_DIR / "stages" / stage_id
+    stage_upload_dir.mkdir(parents=True, exist_ok=True)
+
+    file_ext = Path(file.filename).suffix
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = stage_upload_dir / unique_filename
+
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    db_file = File(
+        stage_id=stage_id,          # привязка к этапу, не к задаче
+        task_id=None,
+        approval_id=None,
+        uploaded_by_user_id=current_user.id,
+        file_name=file.filename,
+        file_url=str(file_path),
+        file_size_bytes=len(content),
+        mime_type=file.content_type,
+    )
+    db.add(db_file)
+    db.commit()
+    db.refresh(db_file)
+    return db_file
+
+
+@stage_files_router.get("", response_model=List[FileOut])
+def list_stage_files(
+    project_id: str,
+    stage_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Список файлов этапа — только те, что привязаны к stage_id напрямую.
+    Файлы задач сюда не попадают — они живут отдельно.
+    """
+    _get_project_or_404(project_id, db)
+    files = (
+        db.query(File)
+        .filter(File.stage_id == stage_id)
+        .order_by(File.created_at.desc())
+        .all()
+    )
+    return files
+
+
+@stage_files_router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_stage_file(
+    project_id: str,
+    stage_id: str,
+    file_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Удалить файл этапа — из БД и с диска."""
+    db_file = (
+        db.query(File)
+        .filter(File.id == file_id, File.stage_id == stage_id)
+        .first()
+    )
+    if not db_file:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Файл не найден")
+
+    file_path = Path(db_file.file_url)
+    if file_path.exists():
+        file_path.unlink()
+
+    db.delete(db_file)
+    db.commit()
+    return None
+
+
+@stage_files_router.get("/{file_id}/download")
+def download_stage_file(
+    project_id: str,
+    stage_id: str,
+    file_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Скачать файл этапа."""
+    db_file = (
+        db.query(File)
+        .filter(File.id == file_id, File.stage_id == stage_id)
+        .first()
+    )
+    if not db_file:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Файл не найден")
+
+    file_path = Path(db_file.file_url)
+    if not file_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Файл не найден на диске")
+
+    return FileResponse(path=file_path, filename=db_file.file_name, media_type=db_file.mime_type)
+
+
+app.include_router(stage_files_router)
 
 
 # =========================================================================
