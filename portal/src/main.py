@@ -26,11 +26,10 @@ from fastapi import UploadFile, File as FastAPIFile
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from pydantic import BaseModel, EmailStr, ConfigDict
 from jose import jwt, JWTError
 from passlib.context import CryptContext
-
 from database import Base, engine, get_db
 from models import User, Project, Stage, Task, Approval, File, Comment, ActivityLog, Notification
 
@@ -389,6 +388,7 @@ class ProjectOut(BaseModel):
     is_archived: bool
     created_at: datetime
     updated_at: datetime
+    stages: List["StageOut"] = []
 
 
 class ProjectDetailOut(ProjectOut):
@@ -479,7 +479,13 @@ def list_projects(
     как Depends(get_current_user), то есть как проверка "доступ только
     для залогиненных", без влияния на сам результат запроса.
     """
-    projects = db.query(Project).order_by(Project.created_at.desc()).all()
+    projects = (
+    db.query(Project)
+    .options(selectinload(Project.stages))
+    .order_by(Project.created_at.desc())
+    .all()
+    )
+
     return projects
 
 
@@ -543,6 +549,9 @@ class StageOut(BaseModel):
     position: int
     status: str
     created_at: datetime
+
+
+ProjectOut.model_rebuild()
 
 
 # =========================================================================

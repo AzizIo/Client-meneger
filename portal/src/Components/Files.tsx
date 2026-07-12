@@ -20,10 +20,11 @@ interface FilesProps {
     download: string
     remove: string
   }
+  isVisible: boolean
 }
 
 
-export default function Files({ endpoints }: FilesProps) {
+export default function Files({ endpoints, isVisible = false }: FilesProps) {
   const [files, setFiles] = useState<ProjectFile[]>([])
   const [newFilesOpen, setNewFilesOpen] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -121,11 +122,13 @@ export default function Files({ endpoints }: FilesProps) {
       <div className='flex items-center justify-center' >
 
 
-        <div onClick={() => setNewFilesOpen(true)} className="flex mt-4 text-center w-full">
-          <div className="w-full hover:bg-gray-100 border-2 py-4 border-dashed border-gray-300 text-gray-400 rounded-lg">
-            + Добавить файл
+        {isVisible && (
+          <div onClick={() => setNewFilesOpen(true)} className="flex mt-4 text-center w-full">
+            <div className="w-full hover:bg-gray-100 border-2 py-4 border-dashed border-gray-300 text-gray-400 rounded-lg">
+              + Добавить файл
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Логика добавления файла вынессена в отдельный компонент  */}
         <AddFile newFilesOpen={newFilesOpen} selectedFile={selectedFile} setSelectedFile={setSelectedFile} setNewFilesOpen={setNewFilesOpen} setFiles={setFiles} postUrl={endpoints.upload} />

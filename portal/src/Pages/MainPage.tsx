@@ -130,7 +130,6 @@ export default function MainPage() {
                           </span>
                         </div>
                       </div>
-
                       <StageStepper
                         stages={project?.stages ?? []}
                         currentStage={
@@ -140,6 +139,7 @@ export default function MainPage() {
                         }
                         compact
                       />
+
                     </div>
                   </Link>
                 </>

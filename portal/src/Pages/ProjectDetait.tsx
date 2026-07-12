@@ -449,9 +449,12 @@ export default function ProjectDetait() {
                     </>
                   ) : (
                     // {{/* функция для добовления задачи, для двух вариантов реализованно разыне запросы поэтому пришлось в рочную передавать URL  */}}
-                    <Files
-                      endpoints={stageFilesEndpoints}
-                    />
+                    <div className='min-h-screen' >
+
+                      <Files
+                        endpoints={stageFilesEndpoints} isVisible={true}
+                      />
+                    </div>
 
                   )}
                 </div>

@@ -376,7 +376,7 @@ export default function Tasks({
 
                         {/* функция для добовления задачи, для двух вариантов реализованно разыне запросы поэтому пришлось в рочную передавать URL  */}
                         {/* Файлы задачи */}
-                        <Files endpoints={taskFilesEndpoints} />
+                        <Files endpoints={taskFilesEndpoints} isVisible={true} />
 
                         {/* Отправка на согласование */}
                         {!pendingApproval ? (
