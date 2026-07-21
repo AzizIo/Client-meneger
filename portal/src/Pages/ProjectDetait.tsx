@@ -122,6 +122,7 @@ export default function ProjectDetait() {
   }, [projectId]);
 
   useEffect(() => {
+    console.log('ME FROM CONTEXT:', me);
     API.get(`/projects/${projectId}/stages`)
       .then(res => {
         setStages(res.data)
@@ -279,11 +280,13 @@ export default function ProjectDetait() {
   return (
     <>
       <Header />
-      <div className='bg-gray-50' >
+      <div className='bg-gray-50 min-h-screen' >
+
         <div>
           <div className='container px-2 mx-auto py-8 flex justify-between'>
             <div>
               <div className='font-bold text-2xl'>{project.name}</div>
+
               <div className='text-sm text-gray-600'>{project.description}</div>
               <div className='flex items-center mt-2 gap-2'>
                 <div>

@@ -45,10 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     API.get('/auth/me')
       .then(res => setMe(res.data))
-      .catch(() => {
-        // Токен есть, но он невалидный (просрочен или подделан) —
-        // удаляем его, чтобы пользователь увидел экран логина,
-        // а не завис на пустом состоянии.
+      .catch((err) => {
+        console.error('AUTH/ME FAILED:', err.response?.status, err.response?.data); // ← добавить
         localStorage.removeItem('token');
       })
       .finally(() => setIsLoading(false));

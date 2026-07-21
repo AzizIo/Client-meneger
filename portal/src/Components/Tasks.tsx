@@ -106,6 +106,32 @@ export default function Tasks({
     }
   }
 
+  function getStatusBadge(status: string) {
+    const map: Record<string, { label: string; className: string }> = {
+      not_started: {
+        label: 'Не начата',
+        className: 'bg-gray-200 text-gray-600',
+      },
+      pending_approval: {
+        label: 'На согласовании',
+        className: 'bg-yellow-500/20 text-yellow-700',
+      },
+      approved: {
+        label: 'Одобрено',
+        className: 'bg-emerald-600/20 text-emerald-600',
+      },
+      changes_requested: {
+        label: 'Требуются правки',
+        className: 'bg-red-500/20 text-red-600',
+      },
+    };
+
+    return map[status] ?? {
+      label: status, // на случай неизвестного статуса — покажем как есть, а не молча спрячем
+      className: 'bg-gray-200 text-gray-500',
+    };
+  }
+
   const handleEditToggle = () => {
     if (!isEditing && selectedTask) {
       setEditTitle(selectedTask.title);
@@ -246,8 +272,8 @@ export default function Tasks({
                     <div className="text-gray-500 text-sm">
                       {new Date(task.created_at).toLocaleDateString('ru-RU')}
                     </div>
-                    <div className="bg-emerald-600/20 text-emerald-600 px-2 py-1 text-sm rounded-3xl">
-                      {task.status}
+                    <div className={`px-2 py-1 text-sm rounded-3xl ${getStatusBadge(task.status).className}`}>
+                      {getStatusBadge(task.status).label}
                     </div>
                   </div>
                 </div>
@@ -461,6 +487,8 @@ export default function Tasks({
 
                               </>
                             )}
+
+
                             <button
                               onClick={() => decide(pendingApproval.id, 'approved')}
                               className="w-full bg-green-500 text-white font-medium py-3 rounded-lg hover:bg-green-600 transition"

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import API from '../API/api'
 import AddFile from '../Components/AddFile'
-import { Download } from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
 interface ProjectFile {
   id: string,
   task_id: string,
@@ -31,7 +31,7 @@ export default function Files({ endpoints, isVisible = false }: FilesProps) {
   useEffect(() => {
     API.get(endpoints.list)
       .then(res => setFiles(res.data))
-  }, [])
+  }, [endpoints.list])
 
 
   const downloadFile = async (file: ProjectFile) => {
@@ -81,14 +81,14 @@ export default function Files({ endpoints, isVisible = false }: FilesProps) {
       <div className='' >
         <div className="space-y-3">
           {files.map((file) => (
-            <div className='flex flex-col sm:flex-row' >
+            <div key={file.id} className='flex flex-col sm:flex-row' >
               <div className='bg-gray-200 rounded p-2' >
                 <div className='flex items-center gap-4' >
 
                   <div className='' >
                     📄
                   </div>
-                  <div className='flex gap-4 items-center'>
+                  <div className='flex gap-2 items-center'>
 
                     <span className='text-sm text-gray-500'>
                       {file.file_name}
@@ -97,13 +97,13 @@ export default function Files({ endpoints, isVisible = false }: FilesProps) {
                     <span className='text-sm text-gray-500'>
                       {(file.file_size_bytes / (1024 * 1024)).toFixed(2)} МБ
                     </span>
-                    <Download />
+                    <Download size='18' onClick={() => downloadFile(file)} className='cursor-pointer' />
 
                     <button
                       onClick={() => deleteFile(file)}
                       className="text-red-500 hover:text-red-700"
                     >
-                      Удалить
+                      <Trash2 size='18' />
                     </button>
 
                   </div>

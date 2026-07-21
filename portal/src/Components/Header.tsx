@@ -37,6 +37,8 @@ export default function Header() {
             <div onClick={() => navigate('/profile')} >
               {me?.avatar_url ? <div className="" >
                 <img className="flex h-8 w-8  hover:bg-black/50 items-center justify-center rounded-full bg-indigo-100 ring-4 ring-white" src={me.avatar_url} alt="" />
+
+                
               </div> : <div>
                 <div className="flex   hover:bg-zinc-400 h-20 w-20 items-center justify-center rounded-full bg-indigo-100 ring-4 ring-white">
 

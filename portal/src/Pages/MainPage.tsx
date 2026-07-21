@@ -49,16 +49,15 @@ export default function MainPage() {
             </h1>
 
             <p className="mt-2 text-gray-600 max-w-3xl">
-              Это главная страница вашего портала. Здесь вы можете управлять
-              проектами, задачами и отслеживать ход выполнения.
+              Thursday, June 18, 2024
             </p>
           </section>
 
           <section>
-            <h1 className='text-2xl font-semibold mb-6' >Статистика проектов</h1>
+
             <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6'>
-              <div className='rounded-xl  bg-white p-6 shadow-sm min-h-36 flex flex-col justify-between'>
-                <p>
+              <div className='rounded-lg bg-white p-6 border-[0.25px] border-gray-300 max-h-30 flex flex-col justify-between'>
+                <p className='text-sm text-gray-500' >
                   Общее количество проектов
                 </p>
                 <p className='text-black text-2xl font-bold'>
@@ -66,8 +65,8 @@ export default function MainPage() {
                   {projects.length}
                 </p>
               </div>
-              <div className='rounded-xl  bg-white p-6 shadow-sm min-h-36 flex flex-col justify-between'>
-                <p >
+              <div className='rounded-lg max-h-30 border-[0.25px] border-gray-300  bg-white p-6  flex flex-col justify-between'>
+                <p className='text-sm text-gray-500' >
                   Активные проекты
                 </p>
                 <p className='text-black text-2xl font-bold' >
@@ -75,8 +74,8 @@ export default function MainPage() {
                   {projects.filter(p => p.status === 'active').length}
                 </p>
               </div>
-              <div className='rounded-xl  bg-white p-6 shadow-sm min-h-36 flex flex-col justify-between'>
-                <p>
+              <div className='rounded-lg  bg-white p-6 border-[0.25px] border-gray-300 max-h-30 flex flex-col justify-between'>
+                <p className='text-sm text-gray-500' >
                   Завершенные проекты
                 </p>
                 <p className='text-black text-2xl font-bold' >
@@ -84,8 +83,8 @@ export default function MainPage() {
                   {projects.filter(p => p.status === 'completed').length}
                 </p>
               </div>
-              <div className='rounded-xl  bg-white p-6 shadow-sm min-h-36 flex flex-col justify-between'>
-                <p>
+              <div className='rounded-lg bg-white p-6 border-[0.25px] border-gray-300 max-h-30 flex flex-col justify-between'>
+                <p className='text-sm text-gray-500' >
                   В ожидании
                 </p>
                 <p className='text-black text-2xl font-bold' >
@@ -108,7 +107,7 @@ export default function MainPage() {
               {projects.map(project => (
                 <>
                   <Link className='h-full' key={project.id} to={`/projects/${project.id}`}>
-                    <div className=' h-full rounded-xl  border-indigo-500 border-0.5  bg-white shadow-sm hover:shadow-lg transition-all duration-200 p-6 flex flex-col' >
+                    <div className=' h-full rounded-lg border-0.5  bg-white border-[0.25px] border-gray-300 hover:shadow-lg transition-all duration-200 p-6 flex flex-col' >
                       <div className='flex justify-between' >
 
                         <div className="flex-1 space-y-1">
