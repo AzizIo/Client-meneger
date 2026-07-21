@@ -38,9 +38,9 @@ export default function Header() {
               {me?.avatar_url ? <div className="" >
                 <img className="flex h-8 w-8  hover:bg-black/50 items-center justify-center rounded-full bg-indigo-100 ring-4 ring-white" src={me.avatar_url} alt="" />
 
-                
+
               </div> : <div>
-                <div className="flex   hover:bg-zinc-400 h-20 w-20 items-center justify-center rounded-full bg-indigo-100 ring-4 ring-white">
+                <div className="flex   hover:bg-zinc-400 h-12 w-12 items-center justify-center rounded-full bg-indigo-100 ring-4 ring-white">
 
                   <img src={me?.avatar_url} alt="" />
                   <span className="text-xl font-bold text-indigo-700">{me?.full_name[0].toUpperCase()}</span>

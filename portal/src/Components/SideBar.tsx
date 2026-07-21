@@ -9,7 +9,13 @@ import {
   Plus,
   Menu,
   X,
+  UserRoundX
 } from "lucide-react";
+import { useAuth } from '../Context/AuthContext';
+
+
+
+
 
 const NAV_ITEMS = [
   { label: "Dashboard", to: "/main", icon: LayoutDashboard },
@@ -22,6 +28,11 @@ const NAV_ITEMS = [
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
+  const { me, clearMe } = useAuth();
+  const handleLogout = () => {
+    clearMe();
+    navigate('/login'); // подставь свой реальный путь на страницу логина
+  };
   return (
     <>
       <button
@@ -82,6 +93,32 @@ export default function Sidebar() {
                   {label}
                 </NavLink>
               ))}
+              <div>
+
+              </div>
+              <div className="absolute bottom-6 left-4 flex items-center " >
+                <div className="flex items-center gap-2" >
+                  <div>
+                    {me?.avatar_url ? <div className="" >
+                      <img className="flex h-8 w-8  hover:bg-black/50 items-center justify-center rounded-full bg-indigo-100 ring-4 ring-white" src={me.avatar_url} alt="" />
+                    </div> : <div>
+                      <div className="flex   hover:bg-zinc-400 h-10 w-10 items-center justify-center rounded-full bg-indigo-100 ring-4 ring-white">
+
+                        <img src={me?.avatar_url} alt="" />
+                        <span className="text-xl font-bold text-indigo-700">{me?.full_name[0].toUpperCase()}</span>
+                      </div>
+
+                    </div>}
+                  </div>
+                  <div>
+
+                    {me?.full_name}
+                  </div>
+                </div>
+                <div onClick={handleLogout} className="ml-22" >
+                  <UserRoundX />
+                </div>
+              </div>
             </nav>
 
           </div>

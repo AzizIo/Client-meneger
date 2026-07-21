@@ -60,8 +60,7 @@ export default function MainPage() {
                 <p className='text-sm text-gray-500' >
                   Общее количество проектов
                 </p>
-                <p className='text-black text-2xl font-bold'>
-
+                <p className='text-indigo-500 text-2xl font-bold'>
                   {projects.length}
                 </p>
               </div>
@@ -69,7 +68,7 @@ export default function MainPage() {
                 <p className='text-sm text-gray-500' >
                   Активные проекты
                 </p>
-                <p className='text-black text-2xl font-bold' >
+                <p className='text-orange-500 text-2xl font-bold' >
 
                   {projects.filter(p => p.status === 'active').length}
                 </p>
@@ -78,7 +77,7 @@ export default function MainPage() {
                 <p className='text-sm text-gray-500' >
                   Завершенные проекты
                 </p>
-                <p className='text-black text-2xl font-bold' >
+                <p className='text-green-500 text-2xl font-bold' >
 
                   {projects.filter(p => p.status === 'completed').length}
                 </p>
@@ -87,7 +86,7 @@ export default function MainPage() {
                 <p className='text-sm text-gray-500' >
                   В ожидании
                 </p>
-                <p className='text-black text-2xl font-bold' >
+                <p className='text-red-500 text-2xl font-bold' >
                   {projects.filter(p => p.status === 'on_hold').length}
 
                 </p>
