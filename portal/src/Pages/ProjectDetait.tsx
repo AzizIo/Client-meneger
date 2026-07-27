@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import API from '../API/api'
 import { useParams } from 'react-router-dom'
-import { Link, PenLine } from 'lucide-react';
+import { Link, PenLine, X } from 'lucide-react';
 import Header from '../Components/Header';
 import StageStepper from '../Components/Stagesstepper';
 import { useAuth } from '../Context/AuthContext';
@@ -21,6 +21,8 @@ import {
 } from '@dnd-kit/sortable';
 import SortableStageRow from '../Components/Sortablestagerow'
 import type { DragEndEvent } from "@dnd-kit/core";
+import Team from '../Components/Team';
+
 interface Project {
   id: string;
   executor_id: string;
@@ -96,8 +98,9 @@ export default function ProjectDetait() {
   const [taskDisc, setTaskDisc] = useState("")
   const [tasks, setTasks] = useState<Task[]>([])
   const [assignee, setAssignee] = useState<string>()
-  const [whoOpen, setWhoOpen] = useState<'tasks' | 'files'>('tasks');
+  const [whoOpen, setWhoOpen] = useState<'tasks' | 'files' | 'team'>('tasks');
   const isExecutor = me?.role === 'executor';
+
   // переменная хранит в себе все пути чтобы в пропсы передовать только одно занчение
   const stageFilesEndpoints = {
     list: `/projects/${projectId}/stages/${currentStage}/files`,
@@ -106,11 +109,11 @@ export default function ProjectDetait() {
     remove: `/projects/${projectId}/stages/${currentStage}/files`,
   }
   const sensors = useSensors(
-
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     })
   );
+
   useEffect(() => {
     API.get(`/projects/${projectId}`)
       .then(res => {
@@ -135,6 +138,7 @@ export default function ProjectDetait() {
       )
       .catch(err => console.error(err))
   }, [projectId]);
+
   useEffect(() => {
     // Защита: не делаем запрос пока currentStage ещё undefined
     if (!currentStage) return;
@@ -144,8 +148,8 @@ export default function ProjectDetait() {
       .catch(err => console.error(err))
   }, [currentStage])
 
-  if (isLoading) return <div>Загрузка...</div>;
-  if (!project) return <div>Проект не найден</div>;
+  if (isLoading) return <div className="flex items-center justify-center min-h-screen text-sm text-gray-400">Загрузка...</div>;
+  if (!project) return <div className="flex items-center justify-center min-h-screen text-sm text-gray-400">Проект не найден</div>;
 
   async function createTask(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -276,6 +280,11 @@ export default function ProjectDetait() {
     });
   }
 
+  // Единый визуальный язык кнопок — те же классы, что и в Tasks.tsx
+  const btnPrimary =
+    'inline-flex items-center justify-center rounded-md bg-gray-900 text-white hover:bg-gray-700 px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
+  const btnOutline =
+    'inline-flex items-center justify-center rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2.5 text-sm font-medium transition-colors';
 
   return (
     <>
@@ -285,26 +294,27 @@ export default function ProjectDetait() {
         <div>
           <div className='container px-2 mx-auto py-8 flex justify-between'>
             <div>
-              <div className='font-bold text-2xl'>{project.name}</div>
+              <div className='font-bold text-2xl text-gray-900'>{project.name}</div>
 
-              <div className='text-sm text-gray-600'>{project.description}</div>
+              <div className='text-sm text-gray-500'>{project.description}</div>
               <div className='flex items-center mt-2 gap-2'>
                 <div>
                   <img
-                    className="flex h-6 w-6 hover:bg-black/50 items-center justify-center rounded-full bg-indigo-100 ring-4 ring-white"
+                    className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 ring-2 ring-white"
                     src={project.executor.avatar_url}
                     alt=""
                   />
                 </div>
                 <div className='text-gray-700 text-sm'>{project.executor.full_name}</div>
-                <div className='bg-indigo-700/10 text-indigo-700 ml-4 px-2 py-1 rounded-2xl text-sm'>
+                <div className='flex items-center gap-1.5 text-sm text-gray-600 ml-4'>
+                  <span className='h-1.5 w-1.5 rounded-full bg-gray-400' />
                   {project.status}
                 </div>
               </div>
             </div>
             <div>
-              <button className='flex gap-2 bg-gray-300 px-2 rounded text-center justify-center items-center'>
-                <Link size={14} /> <p className='text-gray-700 text-sm'>Share</p>
+              <button className={`${btnOutline} gap-2`}>
+                <Link size={14} /> Share
               </button>
             </div>
           </div>
@@ -313,14 +323,13 @@ export default function ProjectDetait() {
             <div>
               <div>
                 <div>
-                  <div className='flex relative items-center justify-center gap-2 overflow-x-auto bg-zinc-100 mt-4 border border-gray-300 rounded-lg px-3 py-2 whitespace-nowrap'>
+                  <div className='flex relative items-center justify-center gap-2 overflow-x-auto bg-white mt-4 border border-gray-200 rounded-lg px-3 py-2 whitespace-nowrap'>
                     {isExecutor && (
-
                       <button
                         onClick={() => setModal(true)}
-                        className='absolute top-2 right-4 text-gray-400 hover:text-gray-700'
+                        className='absolute top-2 right-4 text-gray-400 hover:text-gray-700 transition-colors'
                       >
-                        <PenLine size={12} />
+                        <PenLine size={14} />
                       </button>
                     )}
 
@@ -328,38 +337,47 @@ export default function ProjectDetait() {
 
                     {modal && (
                       <div
-                        className="fixed inset-0 bg-black/50 flex items-center justify-center"
+                        className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
                         onClick={() => setModal(false)}
                       >
                         <div
-                          className="bg-white p-6 rounded-xl w-full max-w-md"
+                          className="bg-white p-6 rounded-lg w-full max-w-md border border-gray-200 max-h-[85vh] overflow-y-auto"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <form onSubmit={createStage} className="flex flex-col gap-4 max-w-md">
-                            <div className="flex flex-col gap-2">
-                              <label htmlFor="avatar-input" className="text-sm font-medium text-gray-700">
+                          <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-base font-semibold text-gray-900">Управление шагами</h2>
+                            <button
+                              onClick={() => setModal(false)}
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-md text-gray-400 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+
+                          <form onSubmit={createStage} className="flex flex-col gap-4">
+                            <div className="flex flex-col gap-1.5">
+                              <label htmlFor="stage-input" className="text-sm text-gray-500">
                                 Добавить новый шаг
                               </label>
                               <input
                                 onChange={(e) => setStageName(e.target.value)}
                                 value={stageName}
-                                id="avatar-input"
+                                id="stage-input"
                                 type="text"
                                 placeholder='Разработка прототипа'
-                                className="w-full rounded-lg border border-gray-300 px-4 py-2 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none transition focus:border-gray-900"
                               />
                             </div>
-                            <button
-                              type="submit"
-                              className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-700 active:scale-95"
-                            >
+                            <button type="submit" className={btnPrimary}>
                               Добавить
                             </button>
                           </form>
 
-                          <div className='mt-6'>
-                            <h1 className='text-2xl mx-auto font-bold'>Управление шагами</h1>
-                            <div className='mt-8'>
+                          <div className='mt-6 pt-6 border-t border-gray-100'>
+                            <p className="text-gray-400 text-xs uppercase tracking-wide mb-3">
+                              Существующие шаги
+                            </p>
+                            <div className="flex flex-col gap-1">
                               <DndContext
                                 sensors={sensors}
                                 collisionDetection={closestCenter}
@@ -389,29 +407,22 @@ export default function ProjectDetait() {
                             <button
                               onClick={handleSaveAll}
                               disabled={isSaving}
-                              className="w-full mt-4 rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white transition hover:bg-indigo-700 active:scale-95 disabled:opacity-50"
+                              className={`${btnPrimary} w-full mt-4`}
                             >
                               {isSaving ? 'Сохранение...' : 'Сохранить'}
                             </button>
                           </div>
-
-                          <button
-                            onClick={() => setModal(false)}
-                            className="mt-4 bg-red-500 text-white px-4 py-2 rounded"
-                          >
-                            Закрыть
-                          </button>
                         </div>
                       </div>
                     )}
                   </div>
                   <div className="border-b mt-4 border-gray-200 mb-4">
-                    <div className="flex gap-8">
+                    <div className="flex gap-6">
                       <button
                         onClick={() => setWhoOpen('tasks')}
-                        className={`pb-3 text-lg font-medium transition ${whoOpen === 'tasks'
-                          ? 'text-indigo-600 border-b-2 border-indigo-600'
-                          : 'text-gray-500 hover:text-gray-700'
+                        className={`pb-3 text-sm font-medium transition-colors border-b-2 -mb-px ${whoOpen === 'tasks'
+                          ? 'text-gray-900 border-gray-900'
+                          : 'text-gray-400 border-transparent hover:text-gray-600'
                           }`}
                       >
                         Tasks
@@ -419,46 +430,53 @@ export default function ProjectDetait() {
 
                       <button
                         onClick={() => setWhoOpen('files')}
-                        className={`pb-3 text-lg font-medium transition ${whoOpen === 'files'
-                          ? 'text-indigo-600 border-b-2 border-indigo-600'
-                          : 'text-gray-500 hover:text-gray-700'
+                        className={`pb-3 text-sm font-medium transition-colors border-b-2 -mb-px ${whoOpen === 'files'
+                          ? 'text-gray-900 border-gray-900'
+                          : 'text-gray-400 border-transparent hover:text-gray-600'
                           }`}
                       >
                         Files
                       </button>
+                      <button
+                        onClick={() => setWhoOpen('team')}
+                        className={`pb-3 text-sm font-medium transition-colors border-b-2 -mb-px ${whoOpen === 'team'
+                          ? 'text-gray-900 border-gray-900'
+                          : 'text-gray-400 border-transparent hover:text-gray-600'
+                          }`}
+                      >
+                        Команда
+                      </button>
                     </div>
                   </div>
-                  {whoOpen === 'tasks' ? (
-                    <>
+                  {whoOpen === 'tasks' && (
+                    <Tasks
+                      tasks={tasks}
+                      setNewTaskOpen={setNewTaskOpen}
+                      newTaskOpen={newTaskOpen}
+                      setTaskName={setTaskName}
+                      setTaskDisc={setTaskDisc}
+                      createTask={createTask}
+                      setAssignee={setAssignee}
+                      deleteTasks={deleteTasks}
+                      projectId={projectId}
+                      stageId={currentStage}
+                      onTaskUpdate={() => {
+                        API.get(`/projects/${projectId}/stages/${currentStage}/tasks`)
+                          .then(res => setTasks(res.data))
+                          .catch(err => console.error(err));
+                      }}
+                    />
+                  )}
 
-
-                      <Tasks
-                        tasks={tasks}
-                        setNewTaskOpen={setNewTaskOpen}
-                        newTaskOpen={newTaskOpen}
-                        setTaskName={setTaskName}
-                        setTaskDisc={setTaskDisc}
-                        createTask={createTask}
-                        setAssignee={setAssignee}
-                        deleteTasks={deleteTasks}
-                        projectId={projectId}
-                        stageId={currentStage}
-                        onTaskUpdate={() => {
-                          API.get(`/projects/${projectId}/stages/${currentStage}/tasks`)
-                            .then(res => setTasks(res.data))
-                            .catch(err => console.error(err));
-                        }}
-                      />
-                    </>
-                  ) : (
-                    // {{/* функция для добовления задачи, для двух вариантов реализованно разыне запросы поэтому пришлось в рочную передавать URL  */}}
-                    <div className='min-h-screen' >
-
-                      <Files
-                        endpoints={stageFilesEndpoints} isVisible={true}
-                      />
+                  {whoOpen === 'files' && (
+                    <div className='min-h-screen'>
+                      <Files endpoints={stageFilesEndpoints} isVisible={true} />
                     </div>
+                  )}
 
+                  {/* НОВОЕ — вставь свой готовый компонент здесь */}
+                  {whoOpen === 'team' && (
+                    <Team projectId={projectId} executorId={project.executor_id} />
                   )}
                 </div>
               </div>

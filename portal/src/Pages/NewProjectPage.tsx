@@ -1,98 +1,104 @@
 import { useState } from 'react'
-
+import { useNavigate } from 'react-router-dom'
 import API from '../API/api'
 import Header from '../Components/Header'
-
 
 export default function NewProjectPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [client_email, setClientEmail] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const navigate = useNavigate()
 
-  async function handleSubmit(e: any) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    try {
-      await API.post('/projects', {
-        name: name,
-        description: description,
-        client_email: client_email
-      })
+
+    if (!name.trim()) {
+      alert('Введите название проекта')
+      return
     }
-    catch (err: any) {
+
+    try {
+      setIsSaving(true)
+      const res = await API.post('/projects', {
+        name,
+        description,
+        client_email,
+      })
+      navigate(`/projects/${res.data.id}`)
+    } catch (err: any) {
       console.error(err.response?.data || err)
-      if (err == 'Error: Request failed with status code 400') {
+
+      // НОВОЕ: раньше сравнивалось err == 'Error: ...' — err это
+      // объект ошибки axios, а не строка, поэтому такое сравнение
+      // никогда не срабатывало и всегда падало в else. Правильно —
+      // смотреть на err.response?.status.
+      if (err.response?.status === 400) {
         alert('Ошибка: Некорректные данные. Пожалуйста, проверьте введённые данные.')
-      }
-      else if (err == 'Error: Request failed with status code 404') {
+      } else if (err.response?.status === 404) {
         alert('Ошибка: Клиент не найден.')
-      }
-      else {
+      } else {
         alert('Ошибка при создании проекта')
       }
+    } finally {
+      setIsSaving(false)
     }
-
-
   }
 
-  return (
+  const inputClass =
+    'w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-md outline-none transition focus:border-gray-900'
+  const labelClass = 'block text-sm text-gray-500 mb-1.5'
 
+  return (
     <>
       <Header />
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-center mb-2">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="w-full max-w-md bg-white rounded-lg border border-gray-200 p-8">
+          <h1 className="text-xl font-semibold text-center text-gray-900 mb-6">
             Создание нового проекта
           </h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">
-                Название проекта
-              </label>
+              <label className={labelClass}>Название проекта</label>
               <input
                 onChange={(e) => setName(e.target.value)}
                 type="text"
                 placeholder="Введите название проекта"
-                className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={inputClass}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">
-                Описание проекта
-              </label>
+              <label className={labelClass}>Описание проекта</label>
               <input
                 onChange={(e) => setDescription(e.target.value)}
                 type="text"
                 placeholder="Введите описание проекта"
-                className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={inputClass}
               />
             </div>
+
             <div>
-              <label className="block text-sm font-medium mb-1">
-                Введите email клиента
-              </label>
+              <label className={labelClass}>Email клиента</label>
               <input
                 onChange={(e) => setClientEmail(e.target.value)}
                 type="email"
                 placeholder="Введите email клиента"
-                className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={inputClass}
               />
             </div>
 
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition"
+              disabled={isSaving}
+              className="w-full bg-gray-900 text-white text-sm font-medium py-2.5 rounded-md hover:bg-gray-700 transition-colors disabled:opacity-50"
             >
-              Создать проект
+              {isSaving ? 'Создание...' : 'Создать проект'}
             </button>
           </form>
-
-
         </div>
       </div>
-
-
     </>
   )
 }

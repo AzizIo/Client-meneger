@@ -3,20 +3,7 @@ import { useState, useEffect } from "react"
 import Header from "../Components/Header"
 import axios from "axios"
 import { useNavigate } from "react-router-dom"
-// interface ProfileStat {
-//   value: string | number;
-//   label: string;
-// }
-
-// interface ProfileCardProps {
-//   initials?: string;
-//   name?: string;
-//   email?: string;
-//   memberSince?: string;
-//   organization?: string;
-//   role?: string;
-//   stats?: ProfileStat[];
-// }
+import { X, Camera } from "lucide-react"
 
 interface User {
   id: string;
@@ -27,16 +14,14 @@ interface User {
   create_at: string;
 }
 
-
-
 export default function ProfileCard() {
-
   const [me, setMe] = useState<User | null>(null)
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [avatarClick, setAvatarClick] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string>("")
   const navigete = useNavigate()
+
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -47,12 +32,13 @@ export default function ProfileCard() {
       } catch (error) {
         console.error('Error fetching profile:', error)
       }
-
     }
 
     fetchProfile()
   }, [])
-  async function updateAvatar() {
+
+  async function updateAvatar(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
     try {
       await API.put('/auth/me/avatar', {
         avatar_url: avatarUrl
@@ -65,6 +51,7 @@ export default function ProfileCard() {
           }
           : prev
       );
+      setAvatarClick(false)
     }
     catch (err) {
       if (axios.isAxiosError(err)) {
@@ -90,7 +77,9 @@ export default function ProfileCard() {
     { value: 47, label: "Approvals sent" },
     { value: 8, label: "Clients" },
   ]
-  async function handleSave() {
+
+  async function handleSave(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
     try {
       const res = await API.patch('/auth/me', {
         full_name: name,
@@ -108,113 +97,126 @@ export default function ProfileCard() {
       alert("Ошибка")
     }
   }
+
+  const btnPrimary =
+    'inline-flex items-center justify-center rounded-md bg-gray-900 text-white hover:bg-gray-700 px-4 py-2.5 text-sm font-medium transition-colors';
+  const btnOutline =
+    'inline-flex items-center justify-center rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2.5 text-sm font-medium transition-colors';
+  const btnDanger =
+    'inline-flex items-center justify-center rounded-md border border-gray-300 text-gray-700 hover:border-red-300 hover:text-red-600 hover:bg-red-50 px-4 py-2.5 text-sm font-medium transition-colors';
+
   return (
     <>
       <Header />
-      <div className="flex justify-center flex-col items-center h-screen " >
-        <div className="w-full max-w-md  rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      <div className="flex justify-center flex-col items-center min-h-screen bg-gray-50 py-10">
+        <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white overflow-hidden">
           {/* Banner */}
-
-          <div className="relative h-28 bg-linear-to-b from-indigo-500 via-violet-500 to-violet-600">
+          <div className="relative h-24 bg-gray-100 border-b border-gray-200">
             {/* Avatar, overlapping banner and body */}
-            <div onClick={() => setAvatarClick(true)} className="absolute -bottom-10 left-6">
+            <button
+              onClick={() => setAvatarClick(true)}
+              className="absolute -bottom-10 left-6 group"
+            >
+              {me?.avatar_url ? (
+                <img
+                  className="h-20 w-20 rounded-full object-cover ring-4 ring-white bg-gray-100"
+                  src={me.avatar_url}
+                  alt=""
+                />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-900 ring-4 ring-white">
+                  <span className="text-xl font-semibold text-white">
+                    {me?.full_name?.[0]?.toUpperCase() ?? "?"}
+                  </span>
+                </div>
+              )}
+              <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                <Camera size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </button>
+          </div>
 
-              {me?.avatar_url ? <div className="" >
-                <img className="flex h-20 w-20  hover:bg-black/50 items-center justify-center rounded-full bg-indigo-100 ring-4 ring-white" src={me.avatar_url} alt="" />
-              </div> : <div>
-                <div className="flex   hover:bg-zinc-400 h-20 w-20 items-center justify-center rounded-full bg-indigo-100 ring-4 ring-white">
-
-                  <img src={me?.avatar_url} alt="" />
-                  <span className="text-xl font-bold text-indigo-700">{me?.full_name[0].toUpperCase()}</span>
+          {avatarClick && (
+            <div
+              className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+              onClick={() => setAvatarClick(false)}
+            >
+              <div
+                className="bg-white p-6 rounded-lg w-full max-w-md border border-gray-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-base font-semibold text-gray-900">Аватарка</h2>
+                  <button
+                    onClick={() => setAvatarClick(false)}
+                    className="inline-flex items-center justify-center h-8 w-8 rounded-md text-gray-400 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
                 </div>
 
-              </div>}
-
-            </div>
-          </div>
-          {avatarClick && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center" onClick={() => setAvatarClick(false)} >
-              <div onClick={() => setAvatarClick(false)} >X</div>
-              <div className="bg-white p-6 rounded-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-                <form onSubmit={updateAvatar} className="flex flex-col gap-4 max-w-md">
-                  <div className="flex flex-col gap-2">
-                    <label
-                      htmlFor="avatar-input"
-                      className="text-sm font-medium text-gray-700"
-                    >
+                <form onSubmit={updateAvatar} className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="avatar-input" className="text-sm text-gray-500">
                       URL аватарки
                     </label>
-
                     <input
                       onChange={(e) => setAvatarUrl(e.target.value)}
                       id="avatar-input"
                       type="text"
                       placeholder="https://example.com/avatar.jpg"
-                      className="w-full rounded-lg border border-gray-300 px-4 py-2 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none transition focus:border-gray-900"
                     />
                   </div>
 
-                  <button
-                    type="submit"
-                    className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-700 active:scale-95"
-                  >
+                  <button type="submit" className={btnPrimary}>
                     Сохранить
                   </button>
                 </form>
-                <button
-                  onClick={() => setAvatarClick(false)}
-                  className="mt-4 bg-red-500 text-white px-4 py-2 rounded"
-                >
-                  Закрыть
-                </button>
-                <button
-                  onClick={() => deleteUrl()}
-                  className="mt-4 ml-4 bg-red-500 text-white px-4 py-2 rounded"
-                >
+
+                <button onClick={() => deleteUrl()} className={`${btnDanger} w-full mt-3`}>
                   Удалить аватарку
                 </button>
               </div>
-
             </div>
           )}
-
-
 
           {/* Body */}
           <div className="px-6 pb-6 pt-14">
             {/* Role badge */}
             <div className="flex justify-end -mt-10 mb-2">
-              <span className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700">
+              <span className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 capitalize">
                 {me?.role}
               </span>
             </div>
 
             {/* Name & contact */}
-            <h2 className="text-xl font-bold text-gray-900">{me?.full_name}</h2>
-            <p className="mt-1 text-gray-600">{me?.email}</p>
-            <p className="mt-1 text-sm text-gray-400">
-              Member since {me?.create_at} · Google
+            <h2 className="text-xl font-semibold text-gray-900">{me?.full_name}</h2>
+            <p className="mt-1 text-gray-500 text-sm">{me?.email}</p>
+            <p className="mt-1 text-xs text-gray-400">
+              Member since {me?.create_at}
             </p>
 
             {/* Divider */}
-            <hr className="my-5 border-gray-200" />
+            <hr className="my-5 border-gray-100" />
 
             {/* Stats */}
             <div className="grid grid-cols-3 gap-4">
               {stats.map((stat, i) => (
                 <div key={i}>
-                  <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
-                  <div className="mt-1 text-sm text-gray-500">{stat.label}</div>
+                  <div className="text-xl font-semibold text-gray-900">{stat.value}</div>
+                  <div className="mt-1 text-xs text-gray-400">{stat.label}</div>
                 </div>
               ))}
             </div>
           </div>
-          <form onSubmit={handleSave} className="w-full    p-6 ">
-            <h2 className="text-lg font-bold text-gray-900">Personal Information</h2>
+
+          <form onSubmit={handleSave} className="w-full border-t border-gray-100 p-6">
+            <h2 className="text-sm font-semibold text-gray-900">Personal Information</h2>
 
             {/* Name */}
-            <div className="mt-6">
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+            <div className="mt-5 flex flex-col gap-1.5">
+              <label htmlFor="name" className="text-sm text-gray-500">
                 Name
               </label>
               <input
@@ -222,13 +224,13 @@ export default function ProfileCard() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                className="rounded-md border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-gray-900"
               />
             </div>
 
             {/* Email */}
-            <div className="mt-6">
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            <div className="mt-5 flex flex-col gap-1.5">
+              <label htmlFor="email" className="text-sm text-gray-500">
                 Email address
               </label>
               <input
@@ -236,23 +238,21 @@ export default function ProfileCard() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                className="rounded-md border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-gray-900"
               />
             </div>
 
             {/* Footer */}
-            <div className="mt-8 flex gap-8 justify-end border-t border-gray-100 pt-6">
+            <div className="mt-8 flex gap-3 justify-end border-t border-gray-100 pt-6">
               <button
-                type="submit"
-                className="rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white hover:bg-indigo-700 transition-colors"
-              >
-                Save changes
-              </button>
-              <button
+                type="button"
                 onClick={() => logout()}
-                className="rounded-lg bg-red-500 px-5 py-2.5 font-semibold text-white hover:bg-indigo-700 transition-colors"
+                className={btnDanger}
               >
                 Выйти из аккаунта
+              </button>
+              <button type="submit" className={btnPrimary}>
+                Save changes
               </button>
             </div>
           </form>

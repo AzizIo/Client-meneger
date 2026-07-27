@@ -31,7 +31,7 @@ from pydantic import BaseModel, EmailStr, ConfigDict
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from database import Base, engine, get_db
-from models import User, Project, Stage, Task, Approval, File, Comment, ActivityLog, Notification
+from models import User, Project, Stage, Task, Approval, File, Comment, ActivityLog, Notification, ProjectExecutor
 
 
 # =========================================================================
@@ -1007,7 +1007,6 @@ def send_for_approval(
     db.refresh(approval)
     return approval
 
-
 @tasks_router.post("/{task_id}/approvals/{approval_id}/decide", response_model=ApprovalOut)
 def decide_approval(
     project_id: str,
@@ -1031,7 +1030,7 @@ def decide_approval(
             detail="status должен быть 'approved' или 'rejected'",
         )
 
-    _get_stage_or_404(project_id, stage_id, db)
+    stage = _get_stage_or_404(project_id, stage_id, db)
     task = _get_task_or_404(stage_id, task_id, db)
 
     approval = (
@@ -1060,12 +1059,347 @@ def decide_approval(
 
     db.commit()
     db.refresh(approval)
+
+    # ---------------------------------------------------------------
+    # Проверка: все ли задачи этапа теперь approved?
+    # Если да — весь stage переходит в статус "fully_approved"
+    # (фиолетовый на фронте). Если хотя бы одна задача не approved —
+    # stage откатывается на "in_progress" (актуально для случая,
+    # когда клиент отклонил задачу ПОСЛЕ того, как этап уже был
+    # fully_approved — например, при повторном раунде согласования).
+    # ---------------------------------------------------------------
+    all_tasks = db.query(Task).filter(Task.stage_id == stage_id).all()
+
+    if all_tasks and all(t.status == "approved" for t in all_tasks):
+        stage.status = "fully_approved"
+    elif stage.status == "fully_approved":
+        # Была фиолетовой, но что-то снова не approved — снимаем статус
+        stage.status = "in_progress"
+
+    db.commit()
+
     return approval
 
 
 app.include_router(tasks_router)
 
+# =========================================================================
+# Pydantic SCHEMAS — Comment
+# =========================================================================
 
+class CommentCreate(BaseModel):
+    body: str
+    # is_internal — заметка "только для команды исполнителя", клиент её
+    # не должен видеть и не должен иметь возможность её создать (см.
+    # проверку в create_comment ниже).
+    is_internal: bool = False
+
+
+class CommentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    task_id: str
+    author_user_id: Optional[str] = None
+    author: Optional[UserOut] = None
+    body: str
+    is_internal: bool
+    created_at: datetime
+
+
+# =========================================================================
+# РОУТЕР: /projects/{project_id}/stages/{stage_id}/tasks/{task_id}/comments
+# =========================================================================
+
+comments_router = APIRouter(
+    prefix="/projects/{project_id}/stages/{stage_id}/tasks/{task_id}/comments",
+    tags=["comments"],
+)
+
+
+@comments_router.post("", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
+def create_comment(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    payload: CommentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Создать комментарий к задаче. Доступно и executor, и client —
+    оба должны иметь возможность обсуждать задачу.
+
+    is_internal форсируется в False для client — заметки "только для
+    своей команды" не имеют смысла со стороны заказчика, и client не
+    должен даже случайно пометить свой комментарий как internal.
+    """
+    _get_stage_or_404(project_id, stage_id, db)
+    _get_task_or_404(stage_id, task_id, db)
+
+    is_internal = payload.is_internal if current_user.role == "executor" else False
+
+    comment = Comment(
+        task_id=task_id,
+        author_user_id=current_user.id,
+        body=payload.body,
+        is_internal=is_internal,
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return comment
+
+
+@comments_router.get("", response_model=List[CommentOut])
+def list_comments(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Список комментариев задачи, от старых к новым.
+
+    Client не видит is_internal-комментарии вообще — фильтруем на
+    уровне запроса, а не просто скрываем на фронте, чтобы данные не
+    утекали в сетевой ответ клиенту.
+    """
+    _get_stage_or_404(project_id, stage_id, db)
+    _get_task_or_404(stage_id, task_id, db)
+
+    query = db.query(Comment).filter(Comment.task_id == task_id)
+
+    if current_user.role == "client":
+        query = query.filter(Comment.is_internal == False)  # noqa: E712
+
+    comments = query.order_by(Comment.created_at).all()
+    return comments
+
+
+@comments_router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_comment(
+    project_id: str,
+    stage_id: str,
+    task_id: str,
+    comment_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Удалить комментарий — может только автор. Проверка по
+    author_user_id, а не по роли, чтобы никто не удалял чужие
+    сообщения (даже executor не может стереть комментарий client'а)."""
+    _get_stage_or_404(project_id, stage_id, db)
+    _get_task_or_404(stage_id, task_id, db)
+
+    comment = (
+        db.query(Comment)
+        .filter(Comment.id == comment_id, Comment.task_id == task_id)
+        .first()
+    )
+    if not comment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Комментарий не найден")
+
+    if comment.author_user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Можно удалить только свой комментарий",
+        )
+
+    db.delete(comment)
+    db.commit()
+    return None
+
+
+app.include_router(comments_router)
+
+# =========================================================================
+# Pydantic SCHEMAS — Project Executors
+# =========================================================================
+
+class ProjectExecutorAdd(BaseModel):
+    """Добавление исполнителя в проект — по email, как и при создании
+    самого проекта (client_email), для единообразия UX."""
+    email: EmailStr
+
+
+class ProjectExecutorOut(BaseModel):
+    """Один исполнитель проекта — с флагом is_owner, чтобы фронт мог
+    визуально отличить основного исполнителя (создателя проекта) от
+    добавленных позже коллег, и не давать их удалить."""
+    id: str  # id пользователя (User.id) — то, что явно просили "видно ID"
+    full_name: str
+    email: EmailStr
+    avatar_url: Optional[str] = None
+    is_owner: bool
+    added_at: datetime
+
+
+# =========================================================================
+# РОУТЕР: /projects/{project_id}/executors
+# =========================================================================
+
+project_executors_router = APIRouter(
+    prefix="/projects/{project_id}/executors", tags=["project-executors"]
+)
+
+
+@project_executors_router.get("", response_model=List[ProjectExecutorOut])
+def list_project_executors(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Все исполнители проекта: сначала владелец (Project.executor_id),
+    затем все из project_executor. Owner идёт первым и помечен
+    is_owner=True — фронт может показать его иначе (например, без
+    кнопки "удалить").
+    """
+    project = _get_project_or_404(project_id, db)
+
+    result: List[ProjectExecutorOut] = [
+        ProjectExecutorOut(
+            id=project.executor.id,
+            full_name=project.executor.full_name,
+            email=project.executor.email,
+            avatar_url=project.executor.avatar_url,
+            is_owner=True,
+            added_at=project.created_at,
+        )
+    ]
+
+    additional = (
+        db.query(ProjectExecutor)
+        .filter(ProjectExecutor.project_id == project_id)
+        .order_by(ProjectExecutor.created_at)
+        .all()
+    )
+    for pe in additional:
+        result.append(
+            ProjectExecutorOut(
+                id=pe.user.id,
+                full_name=pe.user.full_name,
+                email=pe.user.email,
+                avatar_url=pe.user.avatar_url,
+                is_owner=False,
+                added_at=pe.created_at,
+            )
+        )
+
+    return result
+
+
+@project_executors_router.post("", response_model=ProjectExecutorOut, status_code=status.HTTP_201_CREATED)
+def add_project_executor(
+    project_id: str,
+    payload: ProjectExecutorAdd,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("executor")),
+):
+    """
+    Добавить исполнителя в проект по email. Только executor может это
+    делать (по аналогии с create_project — require_role("executor")).
+
+    Не проверяем, что current_user — именно владелец ЭТОГО проекта:
+    по твоему решению на этом этапе любой executor может добавлять
+    коллег в любой проект. Если нужно ограничить только владельцем —
+    добавь проверку project.executor_id == current_user.id (см. TODO
+    ниже) — тривиальная правка, если понадобится ужесточить позже.
+    """
+    project = _get_project_or_404(project_id, db)
+
+    if project.executor_id != current_user.id:
+        raise HTTPException(403, "Только владелец проекта может добавлять исполнителей")
+
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Пользователь с таким email не найден",
+        )
+    if user.role != "executor":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Указанный пользователь не зарегистрирован как исполнитель",
+        )
+    if user.id == project.executor_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Этот пользователь уже владелец проекта",
+        )
+
+    existing = (
+        db.query(ProjectExecutor)
+        .filter(ProjectExecutor.project_id == project_id, ProjectExecutor.user_id == user.id)
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Этот исполнитель уже добавлен в проект",
+        )
+
+    pe = ProjectExecutor(
+        project_id=project_id,
+        user_id=user.id,
+        added_by_user_id=current_user.id,
+    )
+    db.add(pe)
+    db.commit()
+    db.refresh(pe)
+
+    return ProjectExecutorOut(
+        id=user.id,
+        full_name=user.full_name,
+        email=user.email,
+        avatar_url=user.avatar_url,
+        is_owner=False,
+        added_at=pe.created_at,
+    )
+
+
+@project_executors_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_project_executor(
+    project_id: str,
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("executor")),
+):
+    """
+    Удалить исполнителя из проекта. Владельца (Project.executor_id)
+    удалить так нельзя — это архитектурно "тот, кто ведёт проект",
+    убрать его отсюда значило бы обезглавить проект. Если нужно сменить
+    владельца — это отдельная операция (например, PATCH /projects/{id}
+    с новым executor_id), сюда не относится.
+    """
+    project = _get_project_or_404(project_id, db)
+    if project.executor_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Только владелец проекта может удалять исполнителей",
+            )
+    if user_id == project.executor_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нельзя удалить владельца проекта, только дополнительных исполнителей",
+        )
+
+    pe = (
+        db.query(ProjectExecutor)
+        .filter(ProjectExecutor.project_id == project_id, ProjectExecutor.user_id == user_id)
+        .first()
+    )
+    if not pe:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Исполнитель не найден в этом проекте")
+
+    db.delete(pe)
+    db.commit()
+    return None
+
+
+app.include_router(project_executors_router)
 # =========================================================================
 # FILE — загрузка и получение файлов
 # =========================================================================
@@ -1569,9 +1903,50 @@ def download_stage_file(
 
     return FileResponse(path=file_path, filename=db_file.file_name, media_type=db_file.mime_type)
 
+dashboard_router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
+
+
+@dashboard_router.get("/pending-approvals")
+
+def list_pending_approval_tasks(
+
+    db: Session = Depends(get_db),
+
+    current_user: User = Depends(get_current_user),
+
+):
+
+    """
+
+    Все задачи, ожидающие согласования.
+
+    Используется для главной страницы/дашборда.
+
+    """
+
+
+
+    tasks = (
+
+        db.query(Task)
+
+        .options(selectinload(Task.assignee))
+
+        .filter(Task.status == "pending_approval")
+
+        .order_by(Task.created_at.desc())
+
+        .all()
+
+    )
+
+
+
+    return tasks
+    
 app.include_router(stage_files_router)
-
+app.include_router(dashboard_router)
 
 # =========================================================================
 # Создание таблиц при первом запуске

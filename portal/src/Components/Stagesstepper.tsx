@@ -1,32 +1,41 @@
 // StageStepper.jsx
 //
-// Степпер этапов с горизонтальной линией между карточками и цветовой
-// индикацией статуса (completed / in_progress / not_started) — как
-// было задумано в Figma-промпте: "Брифинг ✅ → Прототип ✅ → Дизайн 🟡
-// → Верстка ⬜ → Тестирование ⬜ → Релиз ⬜".
+// Степпер этапов с горизонтальной линией между карточками и
+// нейтральной индикацией статуса (completed / in_progress / not_started).
+// Единый визуальный язык с остальным приложением: чёрный/серый вместо
+// цветных заливок, статус читается по насыщенности, а не по цвету.
 
 import { Check } from "lucide-react";
-// Маппинг статуса этапа на цвета — централизованно в одном месте,
+
+// Маппинг статуса этапа на стили — централизованно в одном месте,
 // чтобы не разбрасывать одинаковые условия по всему JSX.
+// Добавляем новый статус "fully_approved" — стейдж завершён клиентом,
+// все задачи одобрены. Отличаем от "completed" (может значить просто
+// "этап прошёл", без привязки к approval-флоу).
 const STATUS_STYLES = {
+  fully_approved: {
+    circle: "bg-violet-600 text-white",
+    line: "bg-violet-600",
+    label: "text-violet-700 font-medium",
+  },
   completed: {
-    circle: "bg-indigo-600 text-white",
-    line: "bg-indigo-600",
+    circle: "bg-gray-900 text-white",
+    line: "bg-gray-900",
     label: "text-gray-900 font-medium",
   },
   in_progress: {
-    circle: "bg-white border-2 border-indigo-600 text-indigo-600",
+    circle: "bg-white border-2 border-gray-900 text-gray-900",
     line: "bg-gray-200",
-    label: "text-indigo-700 font-medium",
+    label: "text-gray-900 font-medium",
   },
   not_started: {
-    circle: "bg-white border-2 border-gray-300 text-gray-400",
+    circle: "bg-white border-2 border-gray-200 text-gray-400",
     line: "bg-gray-200",
     label: "text-gray-400",
   },
 };
 
-type StageStatus = "completed" | "in_progress" | "not_started";
+type StageStatus = "fully_approved" | "completed" | "in_progress" | "not_started";
 
 interface Stage {
   id: string;
@@ -69,10 +78,10 @@ export default function StageStepper({ stages, currentStage, onStageClick, compa
             >
               <div
                 className={[
-                  "flex items-center justify-center rounded-full shrink-0",
+                  "flex items-center justify-center rounded-full shrink-0 transition-colors",
                   circleSize,
                   styles.circle,
-                  isActive && "ring-2 ring-indigo-500",
+                  isActive && "ring-2 ring-gray-300 ring-offset-2",
                 ].join(" ")}
               >
                 {/* Чекмарк для завершённых, номер этапа — для остальных */}
@@ -81,7 +90,6 @@ export default function StageStepper({ stages, currentStage, onStageClick, compa
                 ) : (
                   index + 1
                 )}
-
               </div>
               {!compact && (
                 <span
@@ -104,6 +112,7 @@ export default function StageStepper({ stages, currentStage, onStageClick, compa
                   lineWidth,
                   compact ? "" : "-mt-6",
                   styles.line,
+                  "transition-colors",
                 ].join(" ")}
               />
             )}

@@ -116,12 +116,9 @@ class Project(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    __table_args__ = (
-        CheckConstraint(
-            "status IN ('active', 'on_hold', 'completed', 'archived')",
-            name="ck_project_status",
-        ),
-    )
+    # ВАЖНО: у Project своего CheckConstraint по статусу нет и не было —
+    # constraint для fully_approved относится к Stage (см. ниже), не к
+    # Project. Никаких __table_args__ здесь быть не должно.
 
     # foreign_keys= обязателен с обеих сторон каждой relationship,
     # когда между двумя таблицами больше одной связи (executor_id
@@ -139,10 +136,43 @@ class Project(Base):
         order_by="Stage.position",
     )
     activity_logs = relationship("ActivityLog", back_populates="project", cascade="all, delete-orphan")
+    additional_executors = relationship(
+        "ProjectExecutor", back_populates="project", cascade="all, delete-orphan"
+    )
+class ProjectExecutor(Base):
+    """
+    Связка проекта с ДОПОЛНИТЕЛЬНЫМИ исполнителями (помимо основного
+    executor_id в Project, который остаётся "владельцем" проекта).
 
+    Нужна отдельная таблица, а не просто список id, потому что это
+    отношение many-to-many: один executor может быть добавлен в
+    несколько проектов, и в одном проекте может быть несколько
+    исполнителей одновременно — обычная строка/колонка так не хранится.
+    """
+    __tablename__ = "project_executor"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    project_id = Column(String, ForeignKey("project.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    added_by_user_id = Column(String, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        # Один и тот же исполнитель не может быть добавлен в один
+        # проект дважды — защита на уровне БД, не только в коде.
+        UniqueConstraint("project_id", "user_id", name="uq_project_executor"),
+    )
+
+    project = relationship("Project", back_populates="additional_executors")
+    user = relationship("User", foreign_keys=[user_id])
 
 class Stage(Base):
-    """Этап проекта (Брифинг, Прототип, Дизайн...)."""
+    """Этап проекта (Брифинг, Прототип, Дизайн...).
+
+    Статус 'fully_approved' — все задачи этапа одобрены клиентом,
+    проставляется автоматически в decide_approval() в main.py, когда
+    последняя pending-задача этапа получает решение 'approved'.
+    """
     __tablename__ = "stage"
 
     id = Column(String, primary_key=True, default=generate_uuid)
@@ -155,7 +185,7 @@ class Stage(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('not_started', 'in_progress', 'completed')",
+            "status IN ('not_started', 'in_progress', 'completed', 'fully_approved')",
             name="ck_stage_status",
         ),
     )
@@ -277,6 +307,7 @@ class Comment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     task = relationship("Task", back_populates="comments")
+    author = relationship("User", foreign_keys=[author_user_id])
 
 
 class ActivityLog(Base):
