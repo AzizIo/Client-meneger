@@ -1,18 +1,20 @@
 import API from '../API/api'
-
-
+import { useToast } from '../Context/ToastContext';
 
 export default function AddFile({ newFilesOpen, selectedFile, setSelectedFile, setNewFilesOpen, setFiles, postUrl }: any) {
+  const { showToast } = useToast();
+
   async function uploadFile() {
     if (!selectedFile) {
-      alert("выберете файл");
+      showToast('Выберите файл');
+      return;
     }
     const formData = new FormData();
     formData.append('file', selectedFile);
     try {
       const res = await API.post(postUrl, formData)
 
-      setFiles(prev => [...prev, res.data])
+      setFiles((prev: any[]) => [...prev, res.data])
       setSelectedFile(null);
       setNewFilesOpen(false);
     }

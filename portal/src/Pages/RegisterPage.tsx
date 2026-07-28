@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import API from '../API/api'
+import { useToast } from '../Context/ToastContext'
 
 export default function RegisterPage() {
+	const { showToast } = useToast()
 	const [whois, setWhois] = useState<string | null>(null)
 	const [email, setEmail] = useState('')
 	const navigate = useNavigate()
@@ -13,15 +15,15 @@ export default function RegisterPage() {
 	async function handleSubmit(e: any) {
 		e.preventDefault()
 		if (!whois) {
-			alert('Выберите роль')
+			showToast('Выберите роль')
 			return
 		}
 		if (password !== confirmPassword) {
-			alert('Пароли не совпадают')
+			showToast('Пароли не совпадают')
 			return
 		}
 		if (!name) {
-			alert('Введите имя')
+			showToast('Введите имя')
 			return
 		}
 
@@ -37,7 +39,7 @@ export default function RegisterPage() {
 				navigate('/main')
 			} catch (err: any) {
 				console.error(err.response?.data || err)
-				alert('Ошибка регистрации')
+				showToast('Ошибка регистрации')
 			}
 		} else if (whois === 'client') {
 			try {
@@ -51,7 +53,7 @@ export default function RegisterPage() {
 				navigate('/main')
 			} catch (err: any) {
 				console.error(err.response?.data || err)
-				alert('Ошибка регистрации')
+				showToast('Ошибка регистрации')
 			}
 		}
 	}
@@ -76,8 +78,8 @@ export default function RegisterPage() {
 						type="button"
 						onClick={() => setWhois('client')}
 						className={`px-4 py-2.5 rounded-md text-sm font-medium transition-colors border ${whois === 'client'
-								? 'bg-gray-900 text-white border-gray-900'
-								: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+							? 'bg-gray-900 text-white border-gray-900'
+							: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
 							}`}
 					>
 						Я клиент
@@ -86,8 +88,8 @@ export default function RegisterPage() {
 						type="button"
 						onClick={() => setWhois('worker')}
 						className={`px-4 py-2.5 rounded-md text-sm font-medium transition-colors border ${whois === 'worker'
-								? 'bg-gray-900 text-white border-gray-900'
-								: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+							? 'bg-gray-900 text-white border-gray-900'
+							: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
 							}`}
 					>
 						Я работник

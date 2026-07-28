@@ -375,7 +375,15 @@ class ProjectCreate(BaseModel):
     description: Optional[str] = None
     client_email: EmailStr
 
-
+class ProjectUpdate(BaseModel):
+    """Все поля Optional — PATCH обновляет только переданное.
+    Отдельная схема от ProjectCreate: там обязателен client_email
+    (создание проекта), здесь его вообще нет (клиента на проекте
+    не меняем этим эндпоинтом)."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None  # 'active' | 'completed' | 'on_hold'
+    is_archived: Optional[bool] = None
 class ProjectOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -504,7 +512,46 @@ def get_project(
             detail="Проект не найден",
         )
     return project
+@projects_router.patch("/{project_id}", response_model=ProjectDetailOut)
+def update_project(
+    project_id: str,
+    payload: ProjectUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Изменение статуса/данных проекта. Только владелец (executor_id) —
+    по аналогии с проверкой в add_project_executor. client и
+    дополнительные исполнители статус менять не могут: решение о
+    завершении/паузе проекта — прерогатива того, кто им управляет.
+    """
+    project = _get_project_or_404(project_id, db)
 
+    if project.executor_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только владелец проекта может изменять его статус",
+        )
+
+    if payload.name is not None:
+        project.name = payload.name
+    if payload.description is not None:
+        project.description = payload.description
+    if payload.status is not None:
+        if payload.status not in ("active", "completed", "on_hold"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="status должен быть 'active', 'completed' или 'on_hold'",
+            )
+        project.status = payload.status
+        log_activity(db, project_id, "project_status_changed", actor_user_id=current_user.id,
+                     event_data={"new_status": payload.status})
+    if payload.is_archived is not None:
+        project.is_archived = payload.is_archived
+
+    db.commit()
+    db.refresh(project)
+    return project
 
 app.include_router(projects_router)
 
@@ -561,6 +608,8 @@ ProjectOut.model_rebuild()
 # проекта, поэтому project_id явно виден в самом URL, а не только
 # в теле запроса. Это REST-конвенция для вложенных сущностей.
 
+
+
 stages_router = APIRouter(prefix="/projects/{project_id}/stages", tags=["stages"])
 
 
@@ -575,7 +624,54 @@ def _get_project_or_404(project_id: str, db: Session) -> Project:
             detail="Проект не найден",
         )
     return project
+def require_project_access(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Project:
+    """
+    Единая проверка доступа для ВСЕХ вложенных роутов проекта
+    (stages, tasks, comments, files, executors).
 
+    FastAPI подставляет project_id автоматически — он берётся из URL
+    пути, даже если этот путь вложенный, например
+    /projects/{project_id}/stages/{stage_id}/tasks/{task_id}/comments —
+    project_id всё равно доступен по имени параметра.
+
+    Используется как доп. Depends в каждом эндпоинте, где project_id
+    есть в пути:
+
+        @some_router.get("/...")
+        def some_endpoint(
+            project_id: str,
+            ...,
+            _project: Project = Depends(require_project_access),
+        ):
+            ...
+
+    Без этой проверки любой залогиненный юзер, зная project_id чужого
+    проекта, мог бы напрямую читать его stages/tasks/files/comments —
+    даже если сам проект не отображается в его /projects списке.
+    """
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Проект не найден")
+
+    is_related = (
+        project.executor_id == current_user.id
+        or project.client_id == current_user.id
+        or db.query(ProjectExecutor)
+            .filter(
+                ProjectExecutor.project_id == project_id,
+                ProjectExecutor.user_id == current_user.id,
+            )
+            .first() is not None
+    )
+
+    if not is_related:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="У вас нет доступа к этому проекту")
+
+    return project
 
 @stages_router.post("", response_model=StageOut, status_code=status.HTTP_201_CREATED)
 def create_stage(
@@ -583,6 +679,7 @@ def create_stage(
     payload: StageCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """
     Создаёт новый этап в конце списка существующих этапов проекта.
@@ -607,6 +704,9 @@ def create_stage(
         position=next_position,
     )
     db.add(stage)
+    log_activity(db, project_id, "task_created", actor_user_id=current_user.id,
+                 task_id=task.id, event_data={"task_title": task.title})
+
     db.commit()
     db.refresh(stage)
     return stage
@@ -617,6 +717,7 @@ def list_stages(
     project_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """Список этапов проекта, отсортированный по position — это и
     есть порядок, в котором рисуется степпер на фронте."""
@@ -637,6 +738,7 @@ def update_stage(
     payload: StageUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """Переименование этапа и/или смена статуса (например, когда
     задачи внутри этапа все выполнены — фронт шлёт status='completed')."""
@@ -664,6 +766,7 @@ def reorder_stages(
     payload: StageReorderRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """
     Применяет новый порядок этапов после drag-and-drop на фронте.
@@ -706,6 +809,7 @@ def delete_stage(
     stage_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """Удаляет этап. cascade="all, delete-orphan" в models.py означает,
     что все Task внутри этого этапа удалятся автоматически вместе с ним —
@@ -734,6 +838,7 @@ class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
     assignee_id: Optional[str] = None
+    due_date: Optional[datetime] = None
 
 
 class TaskUpdate(BaseModel):
@@ -745,6 +850,7 @@ class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     assignee_id: Optional[str] = None
+    due_date: Optional[datetime] = None
 
 
 class TaskOut(BaseModel):
@@ -763,6 +869,7 @@ class TaskOut(BaseModel):
     assignee: Optional[UserOut] = None
     status: str
     position: int
+    due_date: Optional[datetime] = None  
     created_at: datetime
 
 
@@ -833,6 +940,7 @@ def create_task(
     payload: TaskCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("executor")),
+    _project: Project = Depends(require_project_access)
 ):
     """Создание задачи — только executor (по твоему решению на этом
     этапе). require_role("executor") вернёт 403 раньше, чем выполнится
@@ -866,6 +974,7 @@ def list_tasks(
     stage_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """Список задач этапа — доступен и executor, и client (оба могут
     смотреть), поэтому здесь обычный get_current_user, без require_role."""
@@ -886,6 +995,7 @@ def get_task(
     task_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """Одна задача со всей историей раундов согласования — для
     экрана Task Detail."""
@@ -902,6 +1012,7 @@ def update_task(
     payload: TaskUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("executor")),
+    _project: Project = Depends(require_project_access)
 ):
     """Редактирование задачи — только executor."""
     _get_stage_or_404(project_id, stage_id, db)
@@ -926,6 +1037,7 @@ def delete_task(
     task_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("executor")),
+    _project: Project = Depends(require_project_access)
 ):
     """Удаление задачи — только executor. cascade в models.py удалит
     вместе с ней все Approval, File, Comment, привязанные к ней."""
@@ -968,6 +1080,7 @@ def send_for_approval(
     второй раз бессмысленно (и создало бы дубль raund_number,
     нарушив UniqueConstraint в БД).
     """
+    project = _get_project_or_404(project_id, db)
     _get_stage_or_404(project_id, stage_id, db)
     task = _get_task_or_404(stage_id, task_id, db)
 
@@ -1002,7 +1115,17 @@ def send_for_approval(
     # объяснение в models.py/schema.sql), держим его синхронным
     # с реальным состоянием в Approval.
     task.status = "pending_approval"
-
+    log_activity(db, project_id, "approval_requested", actor_user_id=current_user.id,
+                 task_id=task_id, event_data={"task_title": task.title, "round": next_round})
+    create_notification(                              # ← добавить
+        db,
+        recipient_user_id=project.client_id,
+        type="approval_requested",
+        title="Задача отправлена на согласование",
+        body=task.title,
+        related_project_id=project_id,
+        related_task_id=task_id,
+    )
     db.commit()
     db.refresh(approval)
     return approval
@@ -1056,6 +1179,18 @@ def decide_approval(
     # 'approved' -> задача готова, 'rejected' -> задача возвращается
     # executor'у на доработку (и может быть отправлена на новый раунд).
     task.status = "approved" if payload.status == "approved" else "changes_requested"
+    log_activity(db, project_id, "approval_decided", actor_user_id=current_user.id,
+                 task_id=task_id, event_data={"status": payload.status, "comment": payload.decision_comment})
+    create_notification(                              # ← добавить
+        db,
+        recipient_user_id=approval.submitted_by_user_id,
+        type="approval_decided",
+        title="Одобрено" if payload.status == "approved" else "Требуются правки",
+        body=payload.decision_comment,
+        related_project_id=project_id,
+        related_task_id=task_id,
+    )
+
 
     db.commit()
     db.refresh(approval)
@@ -1125,6 +1260,7 @@ def create_comment(
     payload: CommentCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """
     Создать комментарий к задаче. Доступно и executor, и client —
@@ -1134,6 +1270,7 @@ def create_comment(
     своей команды" не имеют смысла со стороны заказчика, и client не
     должен даже случайно пометить свой комментарий как internal.
     """
+    project = _get_project_or_404(project_id, db)   
     _get_stage_or_404(project_id, stage_id, db)
     _get_task_or_404(stage_id, task_id, db)
 
@@ -1145,7 +1282,19 @@ def create_comment(
         body=payload.body,
         is_internal=is_internal,
     )
+    if not is_internal:
+            recipient_id = project.client_id if current_user.role == "executor" else project.executor_id
+            create_notification(                            # ← добавить
+                db,
+                recipient_user_id=recipient_id,
+                type="new_comment",
+                title="Новый комментарий",
+                body=payload.body[:200],
+                related_project_id=project_id,
+                related_task_id=task_id,
+            )
     db.add(comment)
+    log_activity(db, project_id, "comment_added", actor_user_id=current_user.id, task_id=task_id)
     db.commit()
     db.refresh(comment)
     return comment
@@ -1158,6 +1307,7 @@ def list_comments(
     task_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """
     Список комментариев задачи, от старых к новым.
@@ -1186,6 +1336,7 @@ def delete_comment(
     comment_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """Удалить комментарий — может только автор. Проверка по
     author_user_id, а не по роли, чтобы никто не удалял чужие
@@ -1250,6 +1401,7 @@ def list_project_executors(
     project_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """
     Все исполнители проекта: сначала владелец (Project.executor_id),
@@ -1297,6 +1449,7 @@ def add_project_executor(
     payload: ProjectExecutorAdd,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("executor")),
+    _project: Project = Depends(require_project_access)
 ):
     """
     Добавить исполнителя в проект по email. Только executor может это
@@ -1346,7 +1499,17 @@ def add_project_executor(
         user_id=user.id,
         added_by_user_id=current_user.id,
     )
+    create_notification(                                # ← добавить
+        db,
+        recipient_user_id=user.id,
+        type="added_to_project",
+        title="Вас добавили в проект",
+        body=project.name,
+        related_project_id=project_id,
+    )
     db.add(pe)
+    log_activity(db, project_id, "executor_added", actor_user_id=current_user.id,
+                 event_data={"added_email": user.email})
     db.commit()
     db.refresh(pe)
 
@@ -1366,6 +1529,7 @@ def remove_project_executor(
     user_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("executor")),
+    _project: Project = Depends(require_project_access)
 ):
     """
     Удалить исполнителя из проекта. Владельца (Project.executor_id)
@@ -1460,6 +1624,7 @@ async def upload_file_to_task(
     file: UploadFile = FastAPIFile(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """
     Загрузить файл к задаче (не к конкретному раунду, а к задаче целиком).
@@ -1534,6 +1699,7 @@ async def upload_file_to_approval(
     file: UploadFile = FastAPIFile(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("executor")),
+    _project: Project = Depends(require_project_access)
 ):
     """
     Загрузить файл к конкретному раунду согласования.
@@ -1596,6 +1762,7 @@ def list_approval_files(
     approval_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """Список файлов конкретного раунда согласования."""
     _get_stage_or_404(project_id, stage_id, db)
@@ -1622,6 +1789,7 @@ def delete_approval_file(
     file_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("executor")),
+    _project: Project = Depends(require_project_access)
 ):
     """Удалить файл раунда — только executor."""
     db_file = (
@@ -1650,6 +1818,7 @@ def download_approval_file(
     file_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """Скачать файл раунда."""
     db_file = (
@@ -1674,6 +1843,7 @@ def list_task_files(
     task_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """Список всех файлов задачи (без файлов конкретных раундов)."""
     _get_stage_or_404(project_id, stage_id, db)
@@ -1696,6 +1866,7 @@ def delete_file(
     file_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """
     Удалить файл — из БД и с диска.
@@ -1732,6 +1903,7 @@ def download_file(
     file_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """
     Скачать файл. Возвращает сам файл, а не JSON.
@@ -1779,6 +1951,7 @@ async def upload_file_to_stage(
     file: UploadFile = FastAPIFile(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """
     Загрузить файл к этапу — для вкладки Files на уровне Stage.
@@ -1839,6 +2012,7 @@ def list_stage_files(
     stage_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """
     Список файлов этапа — только те, что привязаны к stage_id напрямую.
@@ -1861,6 +2035,7 @@ def delete_stage_file(
     file_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """Удалить файл этапа — из БД и с диска."""
     db_file = (
@@ -1887,6 +2062,7 @@ def download_stage_file(
     file_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access)
 ):
     """Скачать файл этапа."""
     db_file = (
@@ -1947,7 +2123,205 @@ def list_pending_approval_tasks(
     
 app.include_router(stage_files_router)
 app.include_router(dashboard_router)
+# =========================================================================
+# Pydantic SCHEMAS — Notification
+# =========================================================================
 
+class NotificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    type: str
+    title: str
+    body: Optional[str] = None
+    related_project_id: Optional[str] = None
+    related_task_id: Optional[str] = None
+    is_read: bool
+    created_at: datetime
+
+
+def create_notification(
+    db: Session,
+    recipient_user_id: str,
+    type: str,
+    title: str,
+    body: Optional[str] = None,
+    related_project_id: Optional[str] = None,
+    related_task_id: Optional[str] = None,
+) -> None:
+    """
+    Общий хелпер для создания уведомления — вызывается из других
+    эндпоинтов (send_for_approval, decide_approval, create_comment,
+    add_project_executor), а не напрямую пользователем через API.
+
+    Не делает db.commit() сам — уведомление создаётся в РАМКАХ той же
+    транзакции, что и основное действие (например, отправка на
+    согласование), и коммитится вместе с ним одним db.commit() в конце
+    вызывающей функции. Так надёжнее: если основное действие упадёт,
+    "осиротевшее" уведомление не останется в БД.
+    """
+    notification = Notification(
+        recipient_user_id=recipient_user_id,
+        type=type,
+        title=title,
+        body=body,
+        related_project_id=related_project_id,
+        related_task_id=related_task_id,
+    )
+    db.add(notification)
+
+
+# =========================================================================
+# РОУТЕР: /notifications
+# =========================================================================
+
+notifications_router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+
+@notifications_router.get("", response_model=List[NotificationOut])
+def list_notifications(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Уведомления текущего пользователя, от новых к старым."""
+    notifications = (
+        db.query(Notification)
+        .filter(Notification.recipient_user_id == current_user.id)
+        .order_by(Notification.created_at.desc())
+        .all()
+    )
+    return notifications
+
+
+@notifications_router.get("/unread-count")
+def get_unread_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Число непрочитанных — для бейджа с цифрой в сайдбаре/иконке колокольчика."""
+    count = (
+        db.query(Notification)
+        .filter(
+            Notification.recipient_user_id == current_user.id,
+            Notification.is_read == False,  # noqa: E712
+        )
+        .count()
+    )
+    return {"count": count}
+
+
+@notifications_router.patch("/{notification_id}/read", response_model=NotificationOut)
+def mark_notification_read(
+    notification_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Отметить одно уведомление прочитанным."""
+    notification = (
+        db.query(Notification)
+        .filter(
+            Notification.id == notification_id,
+            Notification.recipient_user_id == current_user.id,
+        )
+        .first()
+    )
+    if not notification:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Уведомление не найдено")
+
+    notification.is_read = True
+    db.commit()
+    db.refresh(notification)
+    return notification
+
+
+@notifications_router.patch("/read-all", status_code=status.HTTP_204_NO_CONTENT)
+def mark_all_notifications_read(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Отметить все уведомления пользователя прочитанными — кнопка
+    'Прочитать всё' в UI."""
+    db.query(Notification).filter(
+        Notification.recipient_user_id == current_user.id,
+        Notification.is_read == False,  # noqa: E712
+    ).update({"is_read": True})
+    db.commit()
+    return None
+
+
+app.include_router(notifications_router)
+
+# =========================================================================
+# Pydantic SCHEMAS — ActivityLog
+# =========================================================================
+
+class ActivityLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    task_id: Optional[str] = None
+    actor_user_id: Optional[str] = None
+    actor: Optional[UserOut] = None
+    event_type: str
+    event_data: Optional[str] = None
+    created_at: datetime
+
+
+def log_activity(
+    db: Session,
+    project_id: str,
+    event_type: str,
+    actor_user_id: Optional[str] = None,
+    task_id: Optional[str] = None,
+    event_data: Optional[dict] = None,
+) -> None:
+    """
+    Хелпер для записи события в историю проекта. По аналогии с
+    create_notification — не делает db.commit() сам, коммитится вместе
+    с основным действием в той же транзакции.
+
+    event_data — произвольный dict с доп. контекстом (например,
+    {"task_title": "..."/"stage_name": "..."}), сериализуется в JSON-
+    строку, потому что колонка в БД — Text, не JSON-тип (SQLite).
+    """
+    import json
+    log = ActivityLog(
+        project_id=project_id,
+        task_id=task_id,
+        actor_user_id=actor_user_id,
+        event_type=event_type,
+        event_data=json.dumps(event_data) if event_data else None,
+    )
+    db.add(log)
+
+
+# =========================================================================
+# РОУТЕР: /projects/{project_id}/activity
+# =========================================================================
+
+activity_router = APIRouter(prefix="/projects/{project_id}/activity", tags=["activity"])
+
+
+@activity_router.get("", response_model=List[ActivityLogOut])
+def list_activity(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _project: Project = Depends(require_project_access),
+):
+    """История проекта, от новых к старым."""
+    logs = (
+        db.query(ActivityLog)
+        .options(selectinload(ActivityLog.actor))
+        .filter(ActivityLog.project_id == project_id)
+        .order_by(ActivityLog.created_at.desc())
+        .all()
+    )
+    return logs
+
+
+app.include_router(activity_router)
 # =========================================================================
 # Создание таблиц при первом запуске
 # =========================================================================

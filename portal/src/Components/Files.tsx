@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import API from '../API/api'
 import AddFile from '../Components/AddFile'
 import { Download, Trash2 } from "lucide-react";
+import { useToast } from '../Context/ToastContext';
 interface ProjectFile {
   id: string,
   task_id: string,
@@ -20,11 +21,12 @@ interface FilesProps {
     download: string
     remove: string
   }
-  isVisible: boolean
+  isVisible?: boolean
 }
 
 
 export default function Files({ endpoints, isVisible = false }: FilesProps) {
+  const { showToast } = useToast();
   const [files, setFiles] = useState<ProjectFile[]>([])
   const [newFilesOpen, setNewFilesOpen] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -72,7 +74,7 @@ export default function Files({ endpoints, isVisible = false }: FilesProps) {
 
     } catch (error) {
       console.error("Ошибка удаления файла", error);
-      alert("Не удалось удалить файл");
+      showToast("Не удалось удалить файл");
     }
   };
 

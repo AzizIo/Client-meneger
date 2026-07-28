@@ -324,6 +324,7 @@ class ActivityLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     project = relationship("Project", back_populates="activity_logs")
+    actor = relationship("User", foreign_keys=[actor_user_id])  
 
 
 class Notification(Base):

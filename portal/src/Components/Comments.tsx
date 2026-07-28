@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Send, Trash2, Lock } from 'lucide-react';
 import API from '../API/api';
 import { useAuth } from '../Context/AuthContext';
+import { useToast } from '../Context/ToastContext';
 
 interface Author {
   id: string;
@@ -28,6 +29,7 @@ interface CommentsProps {
 
 export default function Comments({ projectId, stageId, taskId }: CommentsProps) {
   const { me } = useAuth();
+  const { showToast } = useToast();
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [body, setBody] = useState('');
   const [isInternal, setIsInternal] = useState(false);
@@ -57,7 +59,7 @@ export default function Comments({ projectId, stageId, taskId }: CommentsProps) 
       setIsInternal(false);
     } catch (err) {
       console.error(err);
-      alert('Не удалось отправить комментарий');
+      showToast('Не удалось отправить комментарий');
     } finally {
       setIsSending(false);
     }
@@ -69,7 +71,7 @@ export default function Comments({ projectId, stageId, taskId }: CommentsProps) 
       setComments((prev) => prev.filter((c) => c.id !== commentId));
     } catch (err) {
       console.error(err);
-      alert('Не удалось удалить комментарий');
+      showToast('Не удалось удалить комментарий');
     }
   }
 
@@ -88,8 +90,8 @@ export default function Comments({ projectId, stageId, taskId }: CommentsProps) 
             <div
               key={comment.id}
               className={`rounded-lg border px-3 py-2.5 text-sm ${comment.is_internal
-                  ? 'border-amber-200 bg-amber-50'
-                  : 'border-gray-200 bg-white'
+                ? 'border-amber-200 bg-amber-50'
+                : 'border-gray-200 bg-white'
                 }`}
             >
               <div className="flex items-center justify-between gap-2">

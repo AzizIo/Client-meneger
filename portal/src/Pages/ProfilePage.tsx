@@ -4,6 +4,7 @@ import Header from "../Components/Header"
 import axios from "axios"
 import { useNavigate } from "react-router-dom"
 import { X, Camera } from "lucide-react"
+import { useToast } from '../Context/ToastContext'
 
 interface User {
   id: string;
@@ -14,12 +15,20 @@ interface User {
   create_at: string;
 }
 
+interface Stats {
+  projects: number;
+  pendingApprovals: number;
+  clients: number;
+}
+
 export default function ProfileCard() {
+  const { showToast } = useToast()
   const [me, setMe] = useState<User | null>(null)
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [avatarClick, setAvatarClick] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string>("")
+  const [stats, setStats] = useState<Stats>({ projects: 0, pendingApprovals: 0, clients: 0 })
   const navigete = useNavigate()
 
   useEffect(() => {
@@ -35,6 +44,36 @@ export default function ProfileCard() {
     }
 
     fetchProfile()
+  }, [])
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [projectsRes, pendingRes] = await Promise.all([
+          API.get('/projects'),
+          API.get('/dashboard/pending-approvals'),
+        ])
+
+        const projects = projectsRes.data ?? [];
+
+        // Уникальные клиенты по проектам.
+        // ⚠️ Проверь реальное имя поля в ProjectOut (owner_id / client_id / owner.id и т.п.)
+        // и поправь строку ниже, если оно называется иначе.
+        const clientIds = new Set(
+          projects.map((p: any) => p.client_id).filter(Boolean)
+        );
+
+        setStats({
+          projects: projects.length,
+          pendingApprovals: pendingRes.data?.length ?? 0,
+          clients: clientIds.size,
+        })
+      } catch (error) {
+        console.error('Error fetching stats:', error)
+      }
+    }
+
+    fetchStats()
   }, [])
 
   async function updateAvatar(e: React.FormEvent<HTMLFormElement>) {
@@ -72,12 +111,6 @@ export default function ProfileCard() {
     navigete("/login")
   }
 
-  const stats = [
-    { value: 12, label: "Projects" },
-    { value: 47, label: "Approvals sent" },
-    { value: 8, label: "Clients" },
-  ]
-
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     try {
@@ -94,16 +127,20 @@ export default function ProfileCard() {
       });
     }
     catch {
-      alert("Ошибка")
+      showToast("Ошибка")
     }
   }
 
   const btnPrimary =
     'inline-flex items-center justify-center rounded-md bg-gray-900 text-white hover:bg-gray-700 px-4 py-2.5 text-sm font-medium transition-colors';
-  const btnOutline =
-    'inline-flex items-center justify-center rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2.5 text-sm font-medium transition-colors';
   const btnDanger =
     'inline-flex items-center justify-center rounded-md border border-gray-300 text-gray-700 hover:border-red-300 hover:text-red-600 hover:bg-red-50 px-4 py-2.5 text-sm font-medium transition-colors';
+
+  const statItems = [
+    { value: stats.projects, label: "Projects" },
+    { value: stats.pendingApprovals, label: "Pending approvals" },
+    { value: stats.clients, label: "Clients" },
+  ]
 
   return (
     <>
@@ -112,7 +149,6 @@ export default function ProfileCard() {
         <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white overflow-hidden">
           {/* Banner */}
           <div className="relative h-24 bg-gray-100 border-b border-gray-200">
-            {/* Avatar, overlapping banner and body */}
             <button
               onClick={() => setAvatarClick(true)}
               className="absolute -bottom-10 left-6 group"
@@ -183,26 +219,22 @@ export default function ProfileCard() {
 
           {/* Body */}
           <div className="px-6 pb-6 pt-14">
-            {/* Role badge */}
             <div className="flex justify-end -mt-10 mb-2">
               <span className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 capitalize">
                 {me?.role}
               </span>
             </div>
 
-            {/* Name & contact */}
             <h2 className="text-xl font-semibold text-gray-900">{me?.full_name}</h2>
             <p className="mt-1 text-gray-500 text-sm">{me?.email}</p>
             <p className="mt-1 text-xs text-gray-400">
               Member since {me?.create_at}
             </p>
 
-            {/* Divider */}
             <hr className="my-5 border-gray-100" />
 
-            {/* Stats */}
             <div className="grid grid-cols-3 gap-4">
-              {stats.map((stat, i) => (
+              {statItems.map((stat, i) => (
                 <div key={i}>
                   <div className="text-xl font-semibold text-gray-900">{stat.value}</div>
                   <div className="mt-1 text-xs text-gray-400">{stat.label}</div>
@@ -214,7 +246,6 @@ export default function ProfileCard() {
           <form onSubmit={handleSave} className="w-full border-t border-gray-100 p-6">
             <h2 className="text-sm font-semibold text-gray-900">Personal Information</h2>
 
-            {/* Name */}
             <div className="mt-5 flex flex-col gap-1.5">
               <label htmlFor="name" className="text-sm text-gray-500">
                 Name
@@ -228,7 +259,6 @@ export default function ProfileCard() {
               />
             </div>
 
-            {/* Email */}
             <div className="mt-5 flex flex-col gap-1.5">
               <label htmlFor="email" className="text-sm text-gray-500">
                 Email address
@@ -242,7 +272,6 @@ export default function ProfileCard() {
               />
             </div>
 
-            {/* Footer */}
             <div className="mt-8 flex gap-3 justify-end border-t border-gray-100 pt-6">
               <button
                 type="button"

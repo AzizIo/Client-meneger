@@ -2,8 +2,10 @@ import { useState } from "react"
 import { useNavigate } from 'react-router-dom'
 import { Link } from 'react-router-dom'
 import API from "../API/api"
+import { useToast } from '../Context/ToastContext'
 
 export default function LoginPage() {
+	const { showToast } = useToast()
 	const [email, setEmail] = useState('')
 	const [password, setPassword] = useState('')
 	const navigate = useNavigate()
@@ -21,7 +23,7 @@ export default function LoginPage() {
 			navigate('/main')
 		} catch (err: any) {
 			console.error(err.response?.data || err)
-			alert('Неверный логин или пароль')
+			showToast('Неверный логин или пароль')
 		}
 	}
 

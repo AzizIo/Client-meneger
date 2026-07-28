@@ -1,13 +1,14 @@
 // AuthContext.tsx
 //
 // Глобальный контекст для данных текущего пользователя (me).
-// Делает /auth/me один раз при старте приложения и раздаёт
+// Делает /auth/me при старте приложения и раздаёт
 // результат всем компонентам через хук useAuth().
 //
 // Аналогия: как Redux store, но только для одного куска данных
 // (текущий пользователь) и без лишних зависимостей.
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import API from '../API/api';
 
 interface User {
@@ -25,6 +26,9 @@ interface AuthContextType {
   isLoading: boolean;
   // clearMe — вызывать при логауте, чтобы сбросить данные в контексте
   clearMe: () => void;
+  // refetchMe — вызывать сразу после успешного логина,
+  // чтобы подтянуть me без перезагрузки страницы
+  refetchMe: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -33,23 +37,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  async function fetchMe() {
     const token = localStorage.getItem('token');
 
     // Если токена нет вообще — не делаем запрос, сразу isLoading=false.
     // Без этой проверки на странице логина был бы лишний 401-запрос.
     if (!token) {
       setIsLoading(false);
+      setMe(null);
       return;
     }
 
-    API.get('/auth/me')
-      .then(res => setMe(res.data))
-      .catch((err) => {
-        console.error('AUTH/ME FAILED:', err.response?.status, err.response?.data); // ← добавить
-        localStorage.removeItem('token');
-      })
-      .finally(() => setIsLoading(false));
+    setIsLoading(true);
+    try {
+      const res = await API.get('/auth/me');
+      setMe(res.data);
+    } catch (err: any) {
+      console.error('AUTH/ME FAILED:', err.response?.status, err.response?.data);
+      localStorage.removeItem('token');
+      setMe(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchMe();
   }, []);
 
   function clearMe() {
@@ -58,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ me, isLoading, clearMe }}>
+    <AuthContext.Provider value={{ me, isLoading, clearMe, refetchMe: fetchMe }}>
       {children}
     </AuthContext.Provider>
   );

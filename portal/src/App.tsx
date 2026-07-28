@@ -6,6 +6,7 @@ import ProfilePage from './Pages/ProfilePage'
 import NewProjectPage from './Pages/NewProjectPage'
 import ProjectDetait from './Pages/ProjectDetait'
 import ProjectsPage from './Pages/ProjectsPage'
+import NotificationsPage from './Pages/NotificationsPage'
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Route path="/new-project" element={<NewProjectPage />} />
         <Route path="/projects/:projectId" element={<ProjectDetait />} />
         <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
       </Routes>
 
     </BrowserRouter>

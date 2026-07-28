@@ -2,40 +2,59 @@
 //
 // Степпер этапов с горизонтальной линией между карточками и
 // нейтральной индикацией статуса (completed / in_progress / not_started).
-// Единый визуальный язык с остальным приложением: чёрный/серый вместо
-// цветных заливок, статус читается по насыщенности, а не по цвету.
+// Единый визуальный язык с designSystem: цвет статуса берётся из
+// colors (ink/stampBlue/line/muted), а не из цветных Tailwind-заливок —
+// см. Components/ui/designSystem.tsx.
 
 import { Check } from "lucide-react";
+import { colors, fontMono } from "./ui/designSystem";
 
 // Маппинг статуса этапа на стили — централизованно в одном месте,
 // чтобы не разбрасывать одинаковые условия по всему JSX.
-// Добавляем новый статус "fully_approved" — стейдж завершён клиентом,
-// все задачи одобрены. Отличаем от "completed" (может значить просто
-// "этап прошёл", без привязки к approval-флоу).
-const STATUS_STYLES = {
+// "fully_approved" — стейдж завершён клиентом, все задачи одобрены,
+// это approval-состояние, поэтому берём акцентный stampBlue (тот же
+// тон, что и StampBadge tone="blue" для "на согласовании"/активных).
+// "completed" — этап прошёл, но без привязки к approval-флоу — ink.
+type StageStyle = {
+  circleBg: string;
+  circleText: string;
+  circleBorder: string;
+  line: string;
+  label: string;
+};
+
+const STATUS_STYLES: Record<string, StageStyle> = {
   fully_approved: {
-    circle: "bg-violet-600 text-white",
-    line: "bg-violet-600",
-    label: "text-violet-700 font-medium",
+    circleBg: colors.stampBlue,
+    circleText: "#FFFFFF",
+    circleBorder: colors.stampBlue,
+    line: colors.stampBlue,
+    label: colors.stampBlue,
   },
   completed: {
-    circle: "bg-gray-900 text-white",
-    line: "bg-gray-900",
-    label: "text-gray-900 font-medium",
+    circleBg: colors.ink,
+    circleText: "#FFFFFF",
+    circleBorder: colors.ink,
+    line: colors.ink,
+    label: colors.ink,
   },
   in_progress: {
-    circle: "bg-white border-2 border-gray-900 text-gray-900",
-    line: "bg-gray-200",
-    label: "text-gray-900 font-medium",
+    circleBg: "#FFFFFF",
+    circleText: colors.ink,
+    circleBorder: colors.ink,
+    line: colors.line,
+    label: colors.ink,
   },
   not_started: {
-    circle: "bg-white border-2 border-gray-200 text-gray-400",
-    line: "bg-gray-200",
-    label: "text-gray-400",
+    circleBg: "#FFFFFF",
+    circleText: colors.muted,
+    circleBorder: colors.line,
+    line: colors.line,
+    label: colors.muted,
   },
 };
 
-type StageStatus = "fully_approved" | "completed" | "in_progress" | "not_started";
+type StageStatus = string;
 
 interface Stage {
   id: string;
@@ -47,8 +66,8 @@ interface Stage {
 }
 interface StageStepperProps {
   stages: Stage[];
-  currentStage: string
-  onStageClick: (id: string) => void;
+  currentStage?: string;
+  onStageClick?: (id: string) => void;
   compact?: boolean;
 }
 
@@ -78,11 +97,15 @@ export default function StageStepper({ stages, currentStage, onStageClick, compa
             >
               <div
                 className={[
-                  "flex items-center justify-center rounded-full shrink-0 transition-colors",
+                  "flex items-center justify-center rounded-full shrink-0 transition-colors border-2",
                   circleSize,
-                  styles.circle,
-                  isActive && "ring-2 ring-gray-300 ring-offset-2",
                 ].join(" ")}
+                style={{
+                  backgroundColor: styles.circleBg,
+                  color: styles.circleText,
+                  borderColor: styles.circleBorder,
+                  boxShadow: isActive ? `0 0 0 2px #FFFFFF, 0 0 0 4px ${colors.line}` : undefined,
+                }}
               >
                 {/* Чекмарк для завершённых, номер этапа — для остальных */}
                 {stage.status === "completed" ? (
@@ -93,7 +116,8 @@ export default function StageStepper({ stages, currentStage, onStageClick, compa
               </div>
               {!compact && (
                 <span
-                  className={["text-xs whitespace-nowrap", styles.label].join(" ")}
+                  className="text-xs whitespace-nowrap font-medium"
+                  style={{ color: styles.label, fontFamily: fontMono }}
                 >
                   {stage.name}
                 </span>
@@ -102,18 +126,18 @@ export default function StageStepper({ stages, currentStage, onStageClick, compa
 
             {/* Линия между текущим и следующим этапом — не рисуется
                 после последнего элемента (isLast). Цвет линии берём
-                от ТЕКУЩЕГО этапа: если он завершён — линия закрашена,
-                если ещё нет — серая (это и даёт визуальный эффект
-                "прогресс заливается слева направо"). */}
+                от ТЕКУЩЕГО этапа: если он завершён/approved — линия
+                закрашена акцентом, если ещё нет — line (это и даёт
+                визуальный эффект "прогресс заливается слева направо"). */}
             {!isLast && (
               <div
                 className={[
                   "h-0.5",
                   lineWidth,
                   compact ? "" : "-mt-6",
-                  styles.line,
                   "transition-colors",
                 ].join(" ")}
+                style={{ backgroundColor: styles.line }}
               />
             )}
           </div>

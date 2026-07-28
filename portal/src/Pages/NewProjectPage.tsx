@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import API from '../API/api'
 import Header from '../Components/Header'
+import { useToast } from '../Context/ToastContext'
 
 export default function NewProjectPage() {
+  const { showToast } = useToast()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [client_email, setClientEmail] = useState('')
@@ -14,7 +16,7 @@ export default function NewProjectPage() {
     e.preventDefault()
 
     if (!name.trim()) {
-      alert('Введите название проекта')
+      showToast('Введите название проекта')
       return
     }
 
@@ -34,11 +36,11 @@ export default function NewProjectPage() {
       // никогда не срабатывало и всегда падало в else. Правильно —
       // смотреть на err.response?.status.
       if (err.response?.status === 400) {
-        alert('Ошибка: Некорректные данные. Пожалуйста, проверьте введённые данные.')
+        showToast('Ошибка: Некорректные данные. Пожалуйста, проверьте введённые данные.')
       } else if (err.response?.status === 404) {
-        alert('Ошибка: Клиент не найден.')
+        showToast('Ошибка: Клиент не найден.')
       } else {
-        alert('Ошибка при создании проекта')
+        showToast('Ошибка при создании проекта')
       }
     } finally {
       setIsSaving(false)
