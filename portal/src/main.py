@@ -552,6 +552,46 @@ def update_project(
     db.commit()
     db.refresh(project)
     return project
+@projects_router.delete("/{project_id}")
+def delete_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Проект не найден")
+    db.delete(project)
+    db.commit()
+    return None
+
+#  @stages_router.delete("/{stage_id}", status_code=status.HTTP_204_NO_CONTENT)
+# def delete_stage(
+#     project_id: str,
+#     stage_id: str,
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(get_current_user),
+#     _project: Project = Depends(require_project_access)
+# ):
+#     """Удаляет этап. cascade="all, delete-orphan" в models.py означает,
+#     что все Task внутри этого этапа удалятся автоматически вместе с ним —
+#     об этом стоит предупреждать пользователя на фронте перед удалением."""
+#     stage = (
+#         db.query(Stage)
+#         .filter(Stage.id == stage_id, Stage.project_id == project_id)
+#         .first()
+#     )
+#     if not stage:
+#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Этап не найден")
+
+#     db.delete(stage)
+#     db.commit()
+#     return None
+
 
 app.include_router(projects_router)
 
@@ -704,8 +744,7 @@ def create_stage(
         position=next_position,
     )
     db.add(stage)
-    log_activity(db, project_id, "task_created", actor_user_id=current_user.id,
-                 task_id=task.id, event_data={"task_title": task.title})
+    
 
     db.commit()
     db.refresh(stage)

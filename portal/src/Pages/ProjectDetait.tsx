@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import API from '../API/api'
-import { useParams } from 'react-router-dom'
-import { Link, PenLine, X } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom'
+import { Link, PenLine, X, Trash2 } from 'lucide-react';
 import Header from '../Components/Header';
 import StageStepper from '../Components/Stagesstepper';
 import { useAuth } from '../Context/AuthContext';
@@ -127,6 +127,7 @@ export default function ProjectDetait() {
   const [whoOpen, setWhoOpen] = useState<'tasks' | 'files' | 'team' | 'history'>('tasks');
   const isExecutor = me?.role === 'executor';
   const isProjectOwner = me?.id === project?.executor_id;
+  const navigte = useNavigate();
 
   const stageFilesEndpoints = {
     list: `/projects/${projectId}/stages/${currentStage}/files`,
@@ -211,6 +212,14 @@ export default function ProjectDetait() {
 
   async function onStageClick(id: string) {
     setCurrentStage(id)
+  }
+  async function deleteProject(id: string) {
+    try {
+      await API.delete(`/projects/${id}`)
+    }
+    catch {
+      showToast("Ошибка при удалении")
+    }
   }
 
   async function createStage(e: React.FormEvent<HTMLFormElement>) {
@@ -349,10 +358,32 @@ export default function ProjectDetait() {
             </div>
           </div>
 
-          <div className="shrink-0">
+          {/* Действия над проектом. Share — нейтральный outline;
+              Удалить — danger-действие: тот же outline-каркас,
+              но акцент stampRed вместо ink (см. правило про
+              danger-действия в designSystem). */}
+          <div className="shrink-0 flex items-start gap-2">
             <button className={`${btnOutline} gap-2`} style={btnOutlineStyle}>
               <Link size={14} /> Share
             </button>
+
+            {isProjectOwner && (
+              <button
+                onClick={() => {
+                  deleteProject(projectId!);
+                  navigte("/projects");
+                }}
+                className={`${btnOutline} gap-2 transition-colors`}
+                style={{
+                  border: `1px solid ${colors.stampRed}`,
+                  color: colors.stampRed,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = `${colors.stampRed}0D`)}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <Trash2 size={14} /> Удалить
+              </button>
+            )}
           </div>
         </div>
 

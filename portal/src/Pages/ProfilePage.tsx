@@ -5,6 +5,16 @@ import axios from "axios"
 import { useNavigate } from "react-router-dom"
 import { X, Camera } from "lucide-react"
 import { useToast } from '../Context/ToastContext'
+import {
+  colors,
+  fontDisplay,
+  fontMono,
+  Eyebrow,
+  btnPrimary,
+  btnPrimaryStyle,
+  btnOutline,
+  btnOutlineStyle,
+} from '../Components/ui/designSystem'
 
 interface User {
   id: string;
@@ -56,9 +66,6 @@ export default function ProfileCard() {
 
         const projects = projectsRes.data ?? [];
 
-        // Уникальные клиенты по проектам.
-        // ⚠️ Проверь реальное имя поля в ProjectOut (owner_id / client_id / owner.id и т.п.)
-        // и поправь строку ниже, если оно называется иначе.
         const clientIds = new Set(
           projects.map((p: any) => p.client_id).filter(Boolean)
         );
@@ -125,43 +132,42 @@ export default function ProfileCard() {
         full_name: res.data.full_name,
         email: res.data.email,
       });
+      showToast('Изменения сохранены', 'success')
     }
     catch {
       showToast("Ошибка")
     }
   }
 
-  const btnPrimary =
-    'inline-flex items-center justify-center rounded-md bg-gray-900 text-white hover:bg-gray-700 px-4 py-2.5 text-sm font-medium transition-colors';
-  const btnDanger =
-    'inline-flex items-center justify-center rounded-md border border-gray-300 text-gray-700 hover:border-red-300 hover:text-red-600 hover:bg-red-50 px-4 py-2.5 text-sm font-medium transition-colors';
-
   const statItems = [
-    { value: stats.projects, label: "Projects" },
-    { value: stats.pendingApprovals, label: "Pending approvals" },
-    { value: stats.clients, label: "Clients" },
+    { value: stats.projects, label: "Проекты" },
+    { value: stats.pendingApprovals, label: "На согласовании" },
+    { value: stats.clients, label: "Клиенты" },
   ]
+
+  const inputClass = "w-full rounded-md px-3 py-2.5 text-sm outline-none transition";
+  const inputStyle = { border: `1px solid ${colors.line}`, color: colors.ink };
 
   return (
     <>
       <Header />
-      <div className="flex justify-center flex-col items-center min-h-screen bg-gray-50 py-10">
-        <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white overflow-hidden">
-          {/* Banner */}
-          <div className="relative h-24 bg-gray-100 border-b border-gray-200">
+      <div className="flex justify-center flex-col items-center min-h-screen py-10" style={{ backgroundColor: colors.paper }}>
+        <div className="w-full max-w-md rounded-lg bg-white overflow-hidden" style={{ border: `1px solid ${colors.line}` }}>
+          <div className="relative h-24" style={{ backgroundColor: colors.paper, borderBottom: `1px solid ${colors.line}` }}>
             <button
               onClick={() => setAvatarClick(true)}
               className="absolute -bottom-10 left-6 group"
             >
               {me?.avatar_url ? (
                 <img
-                  className="h-20 w-20 rounded-full object-cover ring-4 ring-white bg-gray-100"
+                  className="h-20 w-20 rounded-full object-cover ring-4 ring-white"
+                  style={{ backgroundColor: colors.paper }}
                   src={me.avatar_url}
                   alt=""
                 />
               ) : (
-                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-900 ring-4 ring-white">
-                  <span className="text-xl font-semibold text-white">
+                <div className="flex h-20 w-20 items-center justify-center rounded-full ring-4 ring-white" style={{ backgroundColor: colors.ink }}>
+                  <span className="text-xl font-semibold text-white" style={{ fontFamily: fontDisplay }}>
                     {me?.full_name?.[0]?.toUpperCase() ?? "?"}
                   </span>
                 </div>
@@ -178,14 +184,18 @@ export default function ProfileCard() {
               onClick={() => setAvatarClick(false)}
             >
               <div
-                className="bg-white p-6 rounded-lg w-full max-w-md border border-gray-200"
+                className="bg-white p-6 rounded-lg w-full max-w-md"
+                style={{ border: `1px solid ${colors.line}` }}
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-base font-semibold text-gray-900">Аватарка</h2>
+                  <h2 className="text-base font-semibold" style={{ color: colors.ink, fontFamily: fontDisplay }}>
+                    Аватарка
+                  </h2>
                   <button
                     onClick={() => setAvatarClick(false)}
-                    className="inline-flex items-center justify-center h-8 w-8 rounded-md text-gray-400 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+                    className="inline-flex items-center justify-center h-8 w-8 rounded-md transition-colors hover:bg-black/[0.04]"
+                    style={{ color: colors.muted }}
                   >
                     <X size={16} />
                   </button>
@@ -193,95 +203,103 @@ export default function ProfileCard() {
 
                 <form onSubmit={updateAvatar} className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <label htmlFor="avatar-input" className="text-sm text-gray-500">
-                      URL аватарки
-                    </label>
+                    <Eyebrow>URL аватарки</Eyebrow>
                     <input
                       onChange={(e) => setAvatarUrl(e.target.value)}
                       id="avatar-input"
                       type="text"
                       placeholder="https://example.com/avatar.jpg"
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none transition focus:border-gray-900"
+                      className={inputClass}
+                      style={inputStyle}
                     />
                   </div>
 
-                  <button type="submit" className={btnPrimary}>
+                  <button type="submit" className={btnPrimary} style={btnPrimaryStyle}>
                     Сохранить
                   </button>
                 </form>
 
-                <button onClick={() => deleteUrl()} className={`${btnDanger} w-full mt-3`}>
+                <button
+                  onClick={() => deleteUrl()}
+                  className={`${btnOutline} w-full mt-3`}
+                  style={{ ...btnOutlineStyle, borderColor: colors.stampRed, color: colors.stampRed }}
+                >
                   Удалить аватарку
                 </button>
               </div>
             </div>
           )}
 
-          {/* Body */}
           <div className="px-6 pb-6 pt-14">
             <div className="flex justify-end -mt-10 mb-2">
-              <span className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 capitalize">
+              <span
+                className="rounded-md bg-white px-2.5 py-1 text-xs font-medium capitalize"
+                style={{ border: `1px solid ${colors.line}`, color: colors.muted, fontFamily: fontMono }}
+              >
                 {me?.role}
               </span>
             </div>
 
-            <h2 className="text-xl font-semibold text-gray-900">{me?.full_name}</h2>
-            <p className="mt-1 text-gray-500 text-sm">{me?.email}</p>
-            <p className="mt-1 text-xs text-gray-400">
-              Member since {me?.create_at}
+            <h2 className="text-xl font-semibold" style={{ color: colors.ink, fontFamily: fontDisplay }}>{me?.full_name}</h2>
+            <p className="mt-1 text-sm" style={{ color: colors.muted }}>{me?.email}</p>
+            <p className="mt-1 text-xs" style={{ color: colors.muted, fontFamily: fontMono }}>
+              Участник с {me?.create_at}
             </p>
 
-            <hr className="my-5 border-gray-100" />
+            <hr className="my-5" style={{ borderColor: colors.line }} />
 
             <div className="grid grid-cols-3 gap-4">
               {statItems.map((stat, i) => (
                 <div key={i}>
-                  <div className="text-xl font-semibold text-gray-900">{stat.value}</div>
-                  <div className="mt-1 text-xs text-gray-400">{stat.label}</div>
+                  <div className="text-xl font-semibold" style={{ color: colors.ink, fontFamily: fontDisplay }}>{stat.value}</div>
+                  <div className="mt-1 text-xs" style={{ color: colors.muted }}>{stat.label}</div>
                 </div>
               ))}
             </div>
           </div>
 
-          <form onSubmit={handleSave} className="w-full border-t border-gray-100 p-6">
-            <h2 className="text-sm font-semibold text-gray-900">Personal Information</h2>
+          <form onSubmit={handleSave} className="w-full p-6" style={{ borderTop: `1px solid ${colors.line}` }}>
+            <Eyebrow>Личные данные</Eyebrow>
 
-            <div className="mt-5 flex flex-col gap-1.5">
-              <label htmlFor="name" className="text-sm text-gray-500">
-                Name
+            <div className="mt-4 flex flex-col gap-1.5">
+              <label htmlFor="name" className="text-sm" style={{ color: colors.muted }}>
+                Имя
               </label>
               <input
                 id="name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="rounded-md border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-gray-900"
+                className={inputClass}
+                style={inputStyle}
               />
             </div>
 
             <div className="mt-5 flex flex-col gap-1.5">
-              <label htmlFor="email" className="text-sm text-gray-500">
-                Email address
+              <label htmlFor="email" className="text-sm" style={{ color: colors.muted }}>
+                Email
               </label>
               <input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="rounded-md border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-gray-900"
+                className={inputClass}
+                style={inputStyle}
               />
             </div>
 
-            <div className="mt-8 flex gap-3 justify-end border-t border-gray-100 pt-6">
+            <div className="mt-8 flex gap-3 justify-end pt-6" style={{ borderTop: `1px solid ${colors.line}` }}>
               <button
                 type="button"
                 onClick={() => logout()}
-                className={btnDanger}
+                className={btnOutline}
+                style={{ ...btnOutlineStyle, borderColor: colors.stampRed, color: colors.stampRed }}
               >
                 Выйти из аккаунта
               </button>
-              <button type="submit" className={btnPrimary}>
-                Save changes
+              <button type="submit" className={btnPrimary} style={btnPrimaryStyle}>
+                Сохранить изменения
               </button>
             </div>
           </form>
