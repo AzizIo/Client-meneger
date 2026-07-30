@@ -207,11 +207,8 @@ app = FastAPI(title="Approval Portal API")
 # Allowed, и настоящий запрос до кода эндпоинта не доходит вообще.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vite dev server по умолчанию
-        "http://127.0.0.1:5173",
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -733,7 +730,7 @@ def create_stage(
     max_position = (
         db.query(Stage.position)
         .filter(Stage.project_id == project_id)
-        .order_by(Stage.position.desc())
+        .order_by(S tage.position.desc())
         .first()
     )
     next_position = (max_position[0] + 1) if max_position else 0
