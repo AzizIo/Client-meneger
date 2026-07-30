@@ -730,7 +730,7 @@ def create_stage(
     max_position = (
         db.query(Stage.position)
         .filter(Stage.project_id == project_id)
-        .order_by(S tage.position.desc())
+        .order_by(Stage.position.desc())
         .first()
     )
     next_position = (max_position[0] + 1) if max_position else 0
