@@ -14,7 +14,9 @@ main.py
 
 Запуск: uvicorn main:app --reload
 """
-
+import os
+import httpx
+import uvicorn
 from datetime import datetime, timedelta
 from typing import Optional, List
 import os
@@ -637,6 +639,38 @@ class StageOut(BaseModel):
 
 ProjectOut.model_rebuild()
 
+
+GROQ_API_KEY = ""
+
+@app.get("/tasks/{task_id}/ai-summary")
+async def get_ai_summary(task_id: str, db: Session = Depends(get_db)):
+    task = db.query(Task).get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
+    comments = db.query(Comment).filter(Comment.task_id == task_id).all()
+    comments_text = "\n".join(
+        f"{c.author.full_name if c.author else 'Unknown'}: {c.body}"
+        for c in comments
+    ) or "нет комментариев"
+
+    prompt = f"""Кратко (2-3 предложения) опиши суть задачи и её текущий статус 
+для человека, который должен её утвердить или отклонить.
+
+Задача: {task.title}
+Описание: {task.description}
+Комментарии:
+{comments_text}
+"""
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            json={"model": "llama-3.3-70b-versatile", "max_tokens": 200, "messages": [{"role": "user", "content": prompt}]},
+        )
+        data = resp.json()
+        return {"summary": data["choices"][0]["message"]["content"]}
 
 # =========================================================================
 # РОУТЕР: /projects/{project_id}/stages
@@ -2367,3 +2401,7 @@ def on_startup():
     """Создаёт таблицы при старте сервера, если их ещё нет — аналог
     того, как ты раньше выполнял schema.sql руками через sqlite3."""
     Base.metadata.create_all(bind=engine)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

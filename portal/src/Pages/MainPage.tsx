@@ -115,7 +115,41 @@ export default function MainPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalTask[]>([])
   const [loadingApprovals, setLoadingApprovals] = useState(false)
+  function TaskAiSummary({ taskId }: { taskId: string }) {
+    const [summary, setSummary] = useState<string | null>(null)
+    const [loading, setLoading] = useState(true)
 
+    useEffect(() => {
+      let cancelled = false
+      API.get(`/tasks/${taskId}/ai-summary`)
+        .then(res => { if (!cancelled) setSummary(res.data.summary) })
+        .catch(() => { if (!cancelled) setSummary(null) })
+        .finally(() => { if (!cancelled) setLoading(false) })
+      return () => { cancelled = true }
+    }, [taskId])
+
+    if (loading) {
+      return (
+        <p
+          className='text-xs mt-2 italic'
+          style={{ color: '#8A8681', fontFamily: "'IBM Plex Mono', monospace" }}
+        >
+          ✦ ассистент анализирует...
+        </p>
+      )
+    }
+
+    if (!summary) return null
+
+    return (
+      <p
+        className='text-xs mt-2 leading-relaxed'
+        style={{ color: '#2C4A8C', fontFamily: "'IBM Plex Mono', monospace" }}
+      >
+        ✦ {summary}
+      </p>
+    )
+  }
   useEffect(() => {
     API.get('/auth/me')
       .then(res => setMe(res.data))
@@ -217,6 +251,19 @@ export default function MainPage() {
                     >
                       <CornerMarks />
                       <div className='flex-1 min-w-0'>
+                        <div className='flex-1 min-w-0'>
+                          <h3 className='text-sm font-medium truncate' style={{ color: '#1C1B19' }}>{task.title}</h3>
+                          {task.description && (
+                            <p className='text-sm mt-0.5 line-clamp-1' style={{ color: '#8A8681' }}>
+                              {task.description}
+                            </p>
+                          )}
+                          <p className='text-xs mt-1.5' style={{ color: '#8A8681', fontFamily: "'IBM Plex Mono', monospace" }}>
+                            {task.assignee ? `${task.assignee.full_name} · ` : ''}
+                            {new Date(task.created_at).toLocaleDateString('ru-RU')}
+                          </p>
+                          <TaskAiSummary taskId={task.id} />
+                        </div>
                         <h3 className='text-sm font-medium truncate' style={{ color: '#1C1B19' }}>{task.title}</h3>
                         {task.description && (
                           <p className='text-sm mt-0.5 line-clamp-1' style={{ color: '#8A8681' }}>
