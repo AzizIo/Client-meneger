@@ -8,6 +8,7 @@
 
 import { Check } from "lucide-react";
 import { colors, fontMono } from "./ui/designSystem";
+import { motion } from "motion/react"
 
 // Маппинг статуса этапа на стили — централизованно в одном месте,
 // чтобы не разбрасывать одинаковые условия по всему JSX.
@@ -88,14 +89,20 @@ export default function StageStepper({ stages, currentStage, onStageClick, compa
           // какой именно элемент изменился при обновлении списка.
           <div key={stage.id} className="flex items-center">
             {/* Один "узел" степпера: кружок + название под ним */}
-            <button
+            <motion.button
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              whileHover={{ y: -2, scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              transition={{ duration: 0.24, delay: index * 0.05, ease: 'easeOut' }}
               onClick={() => onStageClick?.(stage.id)}
               className={[
                 "flex flex-col items-center",
                 compact ? "px-1" : "gap-2 px-2",
               ].join(" ")}
             >
-              <div
+              <motion.div
+                whileHover={{ scale: 1.05 }}
                 className={[
                   "flex items-center justify-center rounded-full shrink-0 transition-colors border-2",
                   circleSize,
@@ -113,7 +120,7 @@ export default function StageStepper({ stages, currentStage, onStageClick, compa
                 ) : (
                   index + 1
                 )}
-              </div>
+              </motion.div>
               {!compact && (
                 <span
                   className="text-xs whitespace-nowrap font-medium"
@@ -122,7 +129,7 @@ export default function StageStepper({ stages, currentStage, onStageClick, compa
                   {stage.name}
                 </span>
               )}
-            </button>
+            </motion.button>
 
             {/* Линия между текущим и следующим этапом — не рисуется
                 после последнего элемента (isLast). Цвет линии берём

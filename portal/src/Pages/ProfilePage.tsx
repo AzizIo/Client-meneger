@@ -4,6 +4,7 @@ import Header from "../Components/Header"
 import axios from "axios"
 import { useNavigate } from "react-router-dom"
 import { X, Camera } from "lucide-react"
+import { motion, AnimatePresence } from "motion/react"
 import { useToast } from '../Context/ToastContext'
 import {
   colors,
@@ -152,9 +153,17 @@ export default function ProfileCard() {
     <>
       <Header />
       <div className="flex justify-center flex-col items-center min-h-screen py-10" style={{ backgroundColor: colors.paper }}>
-        <div className="w-full max-w-md rounded-lg bg-white overflow-hidden" style={{ border: `1px solid ${colors.line}` }}>
+        <motion.div
+          initial={{ opacity: 0, y: 16, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.28, ease: 'easeOut' }}
+          className="w-full max-w-md rounded-lg bg-white overflow-hidden"
+          style={{ border: `1px solid ${colors.line}` }}
+        >
           <div className="relative h-24" style={{ backgroundColor: colors.paper, borderBottom: `1px solid ${colors.line}` }}>
-            <button
+            <motion.button
+              whileHover={{ scale: 1.03, y: -1 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => setAvatarClick(true)}
               className="absolute -bottom-10 left-6 group"
             >
@@ -175,60 +184,72 @@ export default function ProfileCard() {
               <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
                 <Camera size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
-            </button>
+            </motion.button>
           </div>
 
-          {avatarClick && (
-            <div
-              className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-              onClick={() => setAvatarClick(false)}
-            >
-              <div
-                className="bg-white p-6 rounded-lg w-full max-w-md"
-                style={{ border: `1px solid ${colors.line}` }}
-                onClick={(e) => e.stopPropagation()}
+          <AnimatePresence>
+            {avatarClick && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+                onClick={() => setAvatarClick(false)}
               >
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-base font-semibold" style={{ color: colors.ink, fontFamily: fontDisplay }}>
-                    Аватарка
-                  </h2>
-                  <button
-                    onClick={() => setAvatarClick(false)}
-                    className="inline-flex items-center justify-center h-8 w-8 rounded-md transition-colors hover:bg-black/[0.04]"
-                    style={{ color: colors.muted }}
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-
-                <form onSubmit={updateAvatar} className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <Eyebrow>URL аватарки</Eyebrow>
-                    <input
-                      onChange={(e) => setAvatarUrl(e.target.value)}
-                      id="avatar-input"
-                      type="text"
-                      placeholder="https://example.com/avatar.jpg"
-                      className={inputClass}
-                      style={inputStyle}
-                    />
+                <motion.div
+                  initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                  transition={{ duration: 0.24, ease: 'easeOut' }}
+                  className="bg-white p-6 rounded-lg w-full max-w-md"
+                  style={{ border: `1px solid ${colors.line}` }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-base font-semibold" style={{ color: colors.ink, fontFamily: fontDisplay }}>
+                      Аватарка
+                    </h2>
+                    <button
+                      onClick={() => setAvatarClick(false)}
+                      className="inline-flex items-center justify-center h-8 w-8 rounded-md transition-colors hover:bg-black/[0.04]"
+                      style={{ color: colors.muted }}
+                    >
+                      <X size={16} />
+                    </button>
                   </div>
 
-                  <button type="submit" className={btnPrimary} style={btnPrimaryStyle}>
-                    Сохранить
-                  </button>
-                </form>
+                  <form onSubmit={updateAvatar} className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Eyebrow>URL аватарки</Eyebrow>
+                      <input
+                        onChange={(e) => setAvatarUrl(e.target.value)}
+                        id="avatar-input"
+                        type="text"
+                        placeholder="https://example.com/avatar.jpg"
+                        className={inputClass}
+                        style={inputStyle}
+                      />
+                    </div>
 
-                <button
-                  onClick={() => deleteUrl()}
-                  className={`${btnOutline} w-full mt-3`}
-                  style={{ ...btnOutlineStyle, borderColor: colors.stampRed, color: colors.stampRed }}
-                >
-                  Удалить аватарку
-                </button>
-              </div>
-            </div>
-          )}
+                    <button type="submit" className={btnPrimary} style={btnPrimaryStyle}>
+                      Сохранить
+                    </button>
+                  </form>
+
+                  <motion.button
+                    whileHover={{ y: -1, scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                    onClick={() => deleteUrl()}
+                    className={`${btnOutline} w-full mt-3`}
+                    style={{ ...btnOutlineStyle, borderColor: colors.stampRed, color: colors.stampRed }}
+                  >
+                    Удалить аватарку
+                  </motion.button>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="px-6 pb-6 pt-14">
             <div className="flex justify-end -mt-10 mb-2">
@@ -250,10 +271,17 @@ export default function ProfileCard() {
 
             <div className="grid grid-cols-3 gap-4">
               {statItems.map((stat, i) => (
-                <div key={i}>
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.22, delay: i * 0.05 }}
+                  className="rounded-lg p-3"
+                  style={{ backgroundColor: colors.paper, border: `1px solid ${colors.line}` }}
+                >
                   <div className="text-xl font-semibold" style={{ color: colors.ink, fontFamily: fontDisplay }}>{stat.value}</div>
                   <div className="mt-1 text-xs" style={{ color: colors.muted }}>{stat.label}</div>
-                </div>
+                </motion.div>
               ))}
             </div>
           </div>
@@ -261,11 +289,17 @@ export default function ProfileCard() {
           <form onSubmit={handleSave} className="w-full p-6" style={{ borderTop: `1px solid ${colors.line}` }}>
             <Eyebrow>Личные данные</Eyebrow>
 
-            <div className="mt-4 flex flex-col gap-1.5">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, delay: 0.08 }}
+              className="mt-4 flex flex-col gap-1.5"
+            >
               <label htmlFor="name" className="text-sm" style={{ color: colors.muted }}>
                 Имя
               </label>
-              <input
+              <motion.input
+                whileFocus={{ scale: 1.005, borderColor: colors.ink }}
                 id="name"
                 type="text"
                 value={name}
@@ -273,13 +307,19 @@ export default function ProfileCard() {
                 className={inputClass}
                 style={inputStyle}
               />
-            </div>
+            </motion.div>
 
-            <div className="mt-5 flex flex-col gap-1.5">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, delay: 0.12 }}
+              className="mt-5 flex flex-col gap-1.5"
+            >
               <label htmlFor="email" className="text-sm" style={{ color: colors.muted }}>
                 Email
               </label>
-              <input
+              <motion.input
+                whileFocus={{ scale: 1.005, borderColor: colors.ink }}
                 id="email"
                 type="email"
                 value={email}
@@ -287,23 +327,31 @@ export default function ProfileCard() {
                 className={inputClass}
                 style={inputStyle}
               />
-            </div>
+            </motion.div>
 
             <div className="mt-8 flex gap-3 justify-end pt-6" style={{ borderTop: `1px solid ${colors.line}` }}>
-              <button
+              <motion.button
+                whileHover={{ y: -1, scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
                 type="button"
                 onClick={() => logout()}
                 className={btnOutline}
                 style={{ ...btnOutlineStyle, borderColor: colors.stampRed, color: colors.stampRed }}
               >
                 Выйти из аккаунта
-              </button>
-              <button type="submit" className={btnPrimary} style={btnPrimaryStyle}>
+              </motion.button>
+              <motion.button
+                whileHover={{ y: -1, scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                type="submit"
+                className={btnPrimary}
+                style={btnPrimaryStyle}
+              >
                 Сохранить изменения
-              </button>
+              </motion.button>
             </div>
           </form>
-        </div>
+        </motion.div>
       </div>
     </>
   );

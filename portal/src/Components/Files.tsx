@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { motion } from 'motion/react'
 import API from '../API/api'
 import AddFile from '../Components/AddFile'
 import { Download, Trash2, FileText } from "lucide-react";
@@ -75,9 +76,13 @@ export default function Files({ endpoints, isVisible = false }: FilesProps) {
   return (
     <>
       <div className="space-y-2">
-        {files.map((file) => (
-          <div
+        {files.map((file, index) => (
+          <motion.div
             key={file.id}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, delay: index * 0.04 }}
+            whileHover={{ y: -2, scale: 1.01 }}
             className="flex items-center justify-between gap-3 rounded-md bg-white px-4 py-3"
             style={{ border: `1px solid ${colors.line}` }}
           >
@@ -92,26 +97,38 @@ export default function Files({ endpoints, isVisible = false }: FilesProps) {
             </div>
 
             <div className="flex items-center gap-3 shrink-0">
-              <button onClick={() => downloadFile(file)} className="transition-colors hover:opacity-70" style={{ color: colors.muted }}>
+              <motion.button
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => downloadFile(file)}
+                className="transition-colors hover:opacity-70"
+                style={{ color: colors.muted }}
+              >
                 <Download size={17} />
-              </button>
-              <button onClick={() => deleteFile(file)} className="transition-colors hover:opacity-70" style={{ color: colors.stampRed }}>
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => deleteFile(file)}
+                className="transition-colors hover:opacity-70"
+                style={{ color: colors.stampRed }}
+              >
                 <Trash2 size={17} />
-              </button>
+              </motion.button>
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
 
       {isVisible && (
-        <div onClick={() => setNewFilesOpen(true)} className="flex mt-3 w-full">
+        <motion.div whileHover={{ y: -1, scale: 1.005 }} whileTap={{ scale: 0.995 }} onClick={() => setNewFilesOpen(true)} className="flex mt-3 w-full">
           <div
             className="w-full text-center py-4 rounded-lg cursor-pointer transition-colors hover:bg-black/[0.02]"
             style={{ border: `1.5px dashed ${colors.line}`, color: colors.muted }}
           >
             + Добавить файл
           </div>
-        </div>
+        </motion.div>
       )}
 
       <AddFile

@@ -3,7 +3,7 @@ import Header from '../Components/Header'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import StageStepper from '../Components/Stagesstepper'
-
+import { motion } from "motion/react"
 interface User {
   id: string;
   full_name: string;
@@ -187,7 +187,12 @@ export default function MainPage() {
     <div className="min-h-screen" style={{ backgroundColor: '#FAFAF8' }}>
       <Header />
       <main className='container mx-auto px-6 py-10 space-y-12'>
-        <section>
+        <motion.section
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.8 }}
+
+        >
           <Eyebrow>Дашборд · {today}</Eyebrow>
           <h1
             className="mt-2 text-3xl font-semibold"
@@ -195,7 +200,7 @@ export default function MainPage() {
           >
             Добро пожаловать, {me ? me.full_name : "..."}
           </h1>
-        </section>
+        </motion.section>
 
         <section>
           <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4'>
@@ -207,12 +212,16 @@ export default function MainPage() {
               >
                 <CornerMarks />
                 <Eyebrow>{String(i + 1).padStart(2, '0')} · {stat.label}</Eyebrow>
-                <p
+                <motion.p
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+
+                  transition={{ duration: 1.4, delay: i * 0.3 }}
                   className="mt-3 text-3xl font-semibold"
                   style={{ color: '#1C1B19', fontFamily: "'Space Grotesk', sans-serif" }}
                 >
                   {stat.value}
-                </p>
+                </motion.p>
               </div>
             ))}
           </div>
@@ -300,12 +309,15 @@ export default function MainPage() {
               Проектов пока нет
             </div>
           ) : (
-            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
+            <motion.div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
+
               {projects.map((project, i) => {
                 const stamp = getStatusStamp(project.status);
                 return (
                   <Link key={project.id} to={`/projects/${project.id}`} className='block h-full'>
-                    <div
+                    <motion.div
+
+                      initial={{ x: -2000 }} animate={{ x: 0 }} transition={{ duration: 0.2, delay: i * 0.1 }}
                       className='group relative h-full rounded-md bg-white hover:shadow-sm transition-shadow p-5 flex flex-col gap-4'
                       style={{ border: '1px solid #DDDAD3' }}
                     >
@@ -325,11 +337,11 @@ export default function MainPage() {
                         }
                         compact
                       />
-                    </div>
+                    </motion.div>
                   </Link>
                 );
               })}
-            </div>
+            </motion.div>
           )}
         </section>
       </main>

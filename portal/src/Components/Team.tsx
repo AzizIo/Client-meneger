@@ -2,6 +2,7 @@ import API from "../API/api";
 import { useAuth } from "../Context/AuthContext";
 import { useToast } from "../Context/ToastContext";
 import { useState, useEffect } from "react";
+import { motion } from "motion/react";
 import { Trash2, UserPlus } from "lucide-react";
 import {
   colors,
@@ -10,7 +11,6 @@ import {
   Eyebrow,
   CornerMarks,
   StampBadge,
-  btnPrimary,
   btnPrimaryStyle,
   btnOutline,
   btnOutlineStyle,
@@ -86,15 +86,16 @@ export default function Team({ projectId, executorId }: Props) {
     }
   }
 
-  const inputClass =
-    "flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm outline-none transition focus:border-gray-900";
   const btnPrimary =
     "inline-flex items-center justify-center gap-1.5 rounded-md bg-gray-900 text-white hover:bg-gray-700 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50";
 
   return (
     <div className="mt-8 space-y-8">
       {isOwner && (
-        <section
+        <motion.section
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22 }}
           className="rounded-lg bg-white p-6"
           style={{ border: `1px solid ${colors.line}` }}
         >
@@ -114,7 +115,9 @@ export default function Team({ projectId, executorId }: Props) {
               }}
             />
 
-            <button
+            <motion.button
+              whileHover={{ y: -1, scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
               type="submit"
               disabled={isAdding}
               className={btnPrimary}
@@ -122,9 +125,9 @@ export default function Team({ projectId, executorId }: Props) {
             >
               <UserPlus size={16} />
               {isAdding ? "Добавление..." : "Добавить"}
-            </button>
+            </motion.button>
           </form>
-        </section>
+        </motion.section>
       )}
 
       <section>
@@ -163,8 +166,12 @@ export default function Team({ projectId, executorId }: Props) {
         ) : (
           <div className="flex flex-col gap-3">
             {executors.map((ex, index) => (
-              <div
+              <motion.div
                 key={ex.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: index * 0.04 }}
+                whileHover={{ y: -2, scale: 1.005 }}
                 className="group relative rounded-lg bg-white p-5 transition-all hover:shadow-sm"
                 style={{
                   border: `1px solid ${colors.line}`,
@@ -244,7 +251,9 @@ export default function Team({ projectId, executorId }: Props) {
                   </div>
 
                   {isOwner && !ex.is_owner && (
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.06 }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={() => handleRemove(ex.id)}
                       className={btnOutline}
                       style={{
@@ -256,10 +265,10 @@ export default function Team({ projectId, executorId }: Props) {
                       title="Удалить исполнителя"
                     >
                       <Trash2 size={16} />
-                    </button>
+                    </motion.button>
                   )}
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         )}
