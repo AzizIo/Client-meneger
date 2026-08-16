@@ -4,6 +4,18 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import StageStepper from '../Components/Stagesstepper'
 import { motion } from "motion/react"
+import {
+  colors,
+  fontDisplay,
+  fontMono,
+  Eyebrow,
+  StampBadge,
+  CornerMarks,
+  type StampTone,
+} from '../Components/ui/designSystem'
+import { div } from 'motion/react-client'
+const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)'
+
 interface User {
   id: string;
   full_name: string;
@@ -48,15 +60,7 @@ interface PendingApprovalTask {
   assignee?: Assignee;
 }
 
-// ── Токены направления ──────────────────────────────────────────
-// ink        #1C1B19  — чернильный текст вместо чёрного
-// paper      #FAFAF8  — тёплый "бумажный" фон
-// line       #DDDAD3  — hairline-разделители
-// stamp-blue #2C4A8C  — акцент, "штамп корректора"
-// stamp-red  #A23B2E  — акцент для "на паузе"/отклонено
-// muted      #8A8681  — второстепенный текст
-
-const STATUS_STAMP: Record<string, { label: string; tone: 'ink' | 'blue' | 'red' }> = {
+const STATUS_STAMP: Record<string, { label: string; tone: StampTone }> = {
   active: { label: 'В работе', tone: 'blue' },
   completed: { label: 'Завершён', tone: 'ink' },
   on_hold: { label: 'На паузе', tone: 'red' },
@@ -66,48 +70,60 @@ function getStatusStamp(status: string) {
   return STATUS_STAMP[status] ?? { label: status, tone: 'ink' as const };
 }
 
-const toneClasses: Record<'ink' | 'blue' | 'red', string> = {
-  ink: 'border-[#1C1B19] text-[#1C1B19]',
-  blue: 'border-[#2C4A8C] text-[#2C4A8C]',
-  red: 'border-[#A23B2E] text-[#A23B2E]',
-};
+// Вынесено на верхний уровень модуля — иначе React пересоздаёт этот
+// компонент как новый тип на каждый ре-рендер MainPage и теряет стейт.
+// ⚠️ Эндпоинт /tasks/{id}/ai-summary пока не существует на бэкенде —
+// компонент тихо ничего не покажет (catch → summary остаётся null),
+// пока роут не появится в main.py.
+function TaskAiSummary({ taskId }: { taskId: string }) {
+  const [summary, setSummary] = useState<string | null>(null)
+  const [projectId, setProjectId] = useState<string | null>(null)
+  const [stageId, setStageId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
-// Штамп статуса — повёрнутая рамка с моноширинным текстом.
-// Единственный акцентный приём страницы, встречается в статах,
-// проектах и задачах на согласование — это и есть "подпись" дизайна.
-function StampBadge({ label, tone = 'ink' }: { label: string; tone?: 'ink' | 'blue' | 'red' }) {
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center rounded border-[1.5px] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider -rotate-2 whitespace-nowrap ${toneClasses[tone]}`}
-      style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-    >
-      {label}
-    </span>
-  );
-}
+  useEffect(() => {
+    let cancelled = false
+    API.get(`/tasks/${taskId}/ai-summary`)
+      .then(res => {
+        if (cancelled) return
+        setSummary(res.data.summary)
+        setProjectId(res.data.project_id)
+        setStageId(res.data.stage_id)
+      })
+      .catch(() => { if (!cancelled) setSummary(null) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [taskId])
 
-// Crop-mark уголки — типографские метки реза, проявляются на hover.
-// Отсылка к "проверке работы перед сдачей", ключевая тема продукта.
-function CornerMarks() {
-  return (
-    <>
-      <span className="pointer-events-none absolute -top-px -left-px h-3 w-3 border-t-[1.5px] border-l-[1.5px] border-[#2C4A8C] opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-      <span className="pointer-events-none absolute -top-px -right-px h-3 w-3 border-t-[1.5px] border-r-[1.5px] border-[#2C4A8C] opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-      <span className="pointer-events-none absolute -bottom-px -left-px h-3 w-3 border-b-[1.5px] border-l-[1.5px] border-[#2C4A8C] opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-      <span className="pointer-events-none absolute -bottom-px -right-px h-3 w-3 border-b-[1.5px] border-r-[1.5px] border-[#2C4A8C] opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-    </>
-  );
-}
+  if (loading) {
+    return (
+      <p className='text-xs mt-2 italic' style={{ color: colors.muted, fontFamily: fontMono }}>
+        ✦ ассистент анализирует...
+      </p>
+    )
+  }
 
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <p
-      className="text-[11px] font-medium uppercase tracking-[0.12em] text-[#8A8681]"
-      style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-    >
-      {children}
+  if (!summary) return null
+
+  const content = (
+    <p className='text-xs mt-2 leading-relaxed' style={{ color: colors.stampBlue, fontFamily: fontMono }}>
+      ✦ {summary}
     </p>
-  );
+  )
+
+  if (projectId && stageId) {
+    return (
+      <Link
+        to={`/projects/${projectId}?stage=${stageId}&task=${taskId}`}
+        onClick={(e) => e.stopPropagation()}
+        className="block hover:opacity-70 transition-opacity"
+      >
+        {content}
+      </Link>
+    )
+  }
+
+  return content
 }
 
 export default function MainPage() {
@@ -115,41 +131,9 @@ export default function MainPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalTask[]>([])
   const [loadingApprovals, setLoadingApprovals] = useState(false)
-  function TaskAiSummary({ taskId }: { taskId: string }) {
-    const [summary, setSummary] = useState<string | null>(null)
-    const [loading, setLoading] = useState(true)
+  const [notification, setNotifications] = useState([])
 
-    useEffect(() => {
-      let cancelled = false
-      API.get(`/tasks/${taskId}/ai-summary`)
-        .then(res => { if (!cancelled) setSummary(res.data.summary) })
-        .catch(() => { if (!cancelled) setSummary(null) })
-        .finally(() => { if (!cancelled) setLoading(false) })
-      return () => { cancelled = true }
-    }, [taskId])
 
-    if (loading) {
-      return (
-        <p
-          className='text-xs mt-2 italic'
-          style={{ color: '#8A8681', fontFamily: "'IBM Plex Mono', monospace" }}
-        >
-          ✦ ассистент анализирует...
-        </p>
-      )
-    }
-
-    if (!summary) return null
-
-    return (
-      <p
-        className='text-xs mt-2 leading-relaxed'
-        style={{ color: '#2C4A8C', fontFamily: "'IBM Plex Mono', monospace" }}
-      >
-        ✦ {summary}
-      </p>
-    )
-  }
   useEffect(() => {
     API.get('/auth/me')
       .then(res => setMe(res.data))
@@ -175,6 +159,11 @@ export default function MainPage() {
     month: 'long',
     day: 'numeric',
   });
+  useEffect(() => {
+    API.get('/notifications/three')
+      .then(res => setNotifications(res.data))
+      .catch(err => console.log(err.response?.data))
+  }, [])
 
   const stats = [
     { label: 'Всего проектов', value: projects.length },
@@ -184,20 +173,16 @@ export default function MainPage() {
   ];
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#FAFAF8' }}>
+    <div className="min-h-screen" style={{ backgroundColor: colors.paper }}>
       <Header />
       <main className='container mx-auto px-6 py-10 space-y-12'>
         <motion.section
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8 }}
-
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
           <Eyebrow>Дашборд · {today}</Eyebrow>
-          <h1
-            className="mt-2 text-3xl font-semibold"
-            style={{ color: '#1C1B19', fontFamily: "'Space Grotesk', sans-serif" }}
-          >
+          <h1 className="mt-2 text-3xl font-semibold" style={{ color: colors.ink, fontFamily: fontDisplay }}>
             Добро пожаловать, {me ? me.full_name : "..."}
           </h1>
         </motion.section>
@@ -208,17 +193,16 @@ export default function MainPage() {
               <div
                 key={stat.label}
                 className='group relative rounded-md bg-white p-5 flex flex-col justify-between'
-                style={{ border: '1px solid #DDDAD3' }}
+                style={{ border: `1px solid ${colors.line}` }}
               >
                 <CornerMarks />
                 <Eyebrow>{String(i + 1).padStart(2, '0')} · {stat.label}</Eyebrow>
                 <motion.p
-                  initial={{ y: 10, opacity: 0 }}
+                  initial={{ y: 6, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
-
-                  transition={{ duration: 1.4, delay: i * 0.3 }}
+                  transition={{ duration: 0.4, delay: i * 0.06, ease: [0.16, 1, 0.3, 1] }}
                   className="mt-3 text-3xl font-semibold"
-                  style={{ color: '#1C1B19', fontFamily: "'Space Grotesk', sans-serif" }}
+                  style={{ color: colors.ink, fontFamily: fontDisplay }}
                 >
                   {stat.value}
                 </motion.p>
@@ -230,10 +214,7 @@ export default function MainPage() {
         {me?.role === 'client' && (
           <section>
             <div className='flex items-center gap-2 mb-4'>
-              <h2
-                className='text-lg font-semibold'
-                style={{ color: '#1C1B19', fontFamily: "'Space Grotesk', sans-serif" }}
-              >
+              <h2 className='text-lg font-semibold' style={{ color: colors.ink, fontFamily: fontDisplay }}>
                 Ожидают вашего согласования
               </h2>
               {pendingApprovals.length > 0 && (
@@ -242,12 +223,9 @@ export default function MainPage() {
             </div>
 
             {loadingApprovals ? (
-              <p className='text-sm' style={{ color: '#8A8681' }}>Загрузка...</p>
+              <p className='text-sm' style={{ color: colors.muted }}>Загрузка...</p>
             ) : pendingApprovals.length === 0 ? (
-              <div
-                className='rounded-md bg-white p-6 text-sm text-center'
-                style={{ border: '1px solid #DDDAD3', color: '#8A8681' }}
-              >
+              <div className='rounded-md bg-white p-6 text-sm text-center' style={{ border: `1px solid ${colors.line}`, color: colors.muted }}>
                 Нет задач, ожидающих согласования
               </div>
             ) : (
@@ -256,33 +234,21 @@ export default function MainPage() {
                   <Link key={task.id} to={`/projects/${task.project_id}?stage=${task.stage_id}&task=${task.id}`} className='block'>
                     <div
                       className='group relative rounded-md bg-white hover:shadow-sm transition-shadow p-4 flex items-center justify-between gap-4'
-                      style={{ border: '1px solid #DDDAD3' }}
+                      style={{ border: `1px solid ${colors.line}`, transition: `box-shadow 200ms ${EASE}` }}
                     >
                       <CornerMarks />
                       <div className='flex-1 min-w-0'>
-                        <div className='flex-1 min-w-0'>
-                          <h3 className='text-sm font-medium truncate' style={{ color: '#1C1B19' }}>{task.title}</h3>
-                          {task.description && (
-                            <p className='text-sm mt-0.5 line-clamp-1' style={{ color: '#8A8681' }}>
-                              {task.description}
-                            </p>
-                          )}
-                          <p className='text-xs mt-1.5' style={{ color: '#8A8681', fontFamily: "'IBM Plex Mono', monospace" }}>
-                            {task.assignee ? `${task.assignee.full_name} · ` : ''}
-                            {new Date(task.created_at).toLocaleDateString('ru-RU')}
-                          </p>
-                          <TaskAiSummary taskId={task.id} />
-                        </div>
-                        <h3 className='text-sm font-medium truncate' style={{ color: '#1C1B19' }}>{task.title}</h3>
+                        <h3 className='text-sm font-medium truncate' style={{ color: colors.ink }}>{task.title}</h3>
                         {task.description && (
-                          <p className='text-sm mt-0.5 line-clamp-1' style={{ color: '#8A8681' }}>
+                          <p className='text-sm mt-0.5 line-clamp-1' style={{ color: colors.muted }}>
                             {task.description}
                           </p>
                         )}
-                        <p className='text-xs mt-1.5' style={{ color: '#8A8681', fontFamily: "'IBM Plex Mono', monospace" }}>
+                        <p className='text-xs mt-1.5' style={{ color: colors.muted, fontFamily: fontMono }}>
                           {task.assignee ? `${task.assignee.full_name} · ` : ''}
                           {new Date(task.created_at).toLocaleDateString('ru-RU')}
                         </p>
+                        <TaskAiSummary taskId={task.id} />
                       </div>
                       <StampBadge label="На согласовании" tone="blue" />
                     </div>
@@ -294,39 +260,34 @@ export default function MainPage() {
         )}
 
         <section>
-          <h2
-            className='text-lg font-semibold mb-4'
-            style={{ color: '#1C1B19', fontFamily: "'Space Grotesk', sans-serif" }}
-          >
+          <h2 className='text-lg font-semibold mb-4' style={{ color: colors.ink, fontFamily: fontDisplay }}>
             Ваши проекты
           </h2>
 
           {projects.length === 0 ? (
-            <div
-              className='rounded-md bg-white p-6 text-sm text-center'
-              style={{ border: '1px solid #DDDAD3', color: '#8A8681' }}
-            >
+            <div className='rounded-md bg-white p-6 text-sm text-center' style={{ border: `1px solid ${colors.line}`, color: colors.muted }}>
               Проектов пока нет
             </div>
           ) : (
-            <motion.div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
-
+            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
               {projects.map((project, i) => {
                 const stamp = getStatusStamp(project.status);
                 return (
                   <Link key={project.id} to={`/projects/${project.id}`} className='block h-full'>
                     <motion.div
-
-                      initial={{ x: -2000 }} animate={{ x: 0 }} transition={{ duration: 0.2, delay: i * 0.1 }}
-                      className='group relative h-full rounded-md bg-white hover:shadow-sm transition-shadow p-5 flex flex-col gap-4'
-                      style={{ border: '1px solid #DDDAD3' }}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: Math.min(i, 8) * 0.04, ease: [0.16, 1, 0.3, 1] }}
+                      whileHover={{ y: -2 }}
+                      className='group relative h-full rounded-md bg-white hover:shadow-sm p-5 flex flex-col gap-4'
+                      style={{ border: `1px solid ${colors.line}`, transition: `box-shadow 200ms ${EASE}` }}
                     >
                       <CornerMarks />
                       <div className='flex justify-between items-start gap-3'>
                         <div className="flex-1 min-w-0">
                           <Eyebrow>Проект №{String(i + 1).padStart(2, '0')}</Eyebrow>
-                          <h3 className="font-medium mt-1 truncate" style={{ color: '#1C1B19' }}>{project.name}</h3>
-                          <p className="text-sm mt-0.5 line-clamp-2" style={{ color: '#8A8681' }}>{project.description}</p>
+                          <h3 className="font-medium mt-1 truncate" style={{ color: colors.ink }}>{project.name}</h3>
+                          <p className="text-sm mt-0.5 line-clamp-2" style={{ color: colors.muted }}>{project.description}</p>
                         </div>
                         <StampBadge label={stamp.label} tone={stamp.tone} />
                       </div>
@@ -341,7 +302,7 @@ export default function MainPage() {
                   </Link>
                 );
               })}
-            </motion.div>
+            </div>
           )}
         </section>
       </main>

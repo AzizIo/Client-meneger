@@ -214,7 +214,7 @@ export default function Tasks({
                     id="task-input"
                     type="text"
 
-
+                    required
                     placeholder="Дизайн главной страницы"
                     className={inputClass}
                     style={inputStyle}

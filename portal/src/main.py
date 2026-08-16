@@ -16,6 +16,7 @@ main.py
 """
 import os
 import httpx
+import os
 import uvicorn
 from datetime import datetime, timedelta
 from typing import Optional, List
@@ -34,6 +35,9 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 from database import Base, engine, get_db
 from models import User, Project, Stage, Task, Approval, File, Comment, ActivityLog, Notification, ProjectExecutor
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 # =========================================================================
@@ -551,19 +555,20 @@ def update_project(
     db.commit()
     db.refresh(project)
     return project
-@projects_router.delete("/{project_id}")
+@projects_router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(
     project_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Проект не найден")
+    project = _get_project_or_404(project_id, db)
+
+    if project.executor_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только владелец проекта может его удалить",
+        )
+
     db.delete(project)
     db.commit()
     return None
@@ -640,15 +645,38 @@ class StageOut(BaseModel):
 ProjectOut.model_rebuild()
 
 
-GROQ_API_KEY = ""
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 @app.get("/tasks/{task_id}/ai-summary")
-async def get_ai_summary(task_id: str, db: Session = Depends(get_db)):
-    task = db.query(Task).get(task_id)
+async def get_ai_summary(
+    task_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    task = db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
 
+    stage = db.get(Stage, task.stage_id)
+    project = db.get(Project, stage.project_id) if stage else None
+
+    is_related = project and (
+        project.executor_id == current_user.id
+        or project.client_id == current_user.id
+        or db.query(ProjectExecutor)
+            .filter(
+                ProjectExecutor.project_id == project.id,
+                ProjectExecutor.user_id == current_user.id,
+            )
+            .first() is not None
+    )
+    if not is_related:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этой задаче")
+
     comments = db.query(Comment).filter(Comment.task_id == task_id).all()
+    if current_user.role == "client":
+        comments = [c for c in comments if not c.is_internal]
+
     comments_text = "\n".join(
         f"{c.author.full_name if c.author else 'Unknown'}: {c.body}"
         for c in comments
@@ -663,14 +691,28 @@ async def get_ai_summary(task_id: str, db: Session = Depends(get_db)):
 {comments_text}
 """
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-            json={"model": "llama-3.3-70b-versatile", "max_tokens": 200, "messages": [{"role": "user", "content": prompt}]},
-        )
-        data = resp.json()
-        return {"summary": data["choices"][0]["message"]["content"]}
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=503, detail="AI-ассистент не настроен")
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+                json={"model": "llama-3.3-70b-versatile", "max_tokens": 200, "messages": [{"role": "user", "content": prompt}]},
+            )
+            data = resp.json()
+            if "choices" not in data:
+                raise HTTPException(status_code=502, detail="Ошибка AI-сервиса")
+
+            return {
+                "summary": data["choices"][0]["message"]["content"],
+                "task_id": task.id,
+                "stage_id": task.stage_id,
+                "project_id": project.id,
+            }
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="Не удалось связаться с AI-сервисом")
 
 # =========================================================================
 # РОУТЕР: /projects/{project_id}/stages
@@ -2261,7 +2303,6 @@ def list_notifications(
         .all()
     )
     return notifications
-
 
 @notifications_router.get("/unread-count")
 def get_unread_count(
