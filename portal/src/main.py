@@ -16,7 +16,6 @@ main.py
 """
 import os
 import httpx
-import os
 import uvicorn
 from datetime import datetime, timedelta
 from typing import Optional, List
@@ -35,9 +34,6 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 from database import Base, engine, get_db
 from models import User, Project, Stage, Task, Approval, File, Comment, ActivityLog, Notification, ProjectExecutor
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 # =========================================================================
@@ -645,7 +641,7 @@ class StageOut(BaseModel):
 ProjectOut.model_rebuild()
 
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_KEY = ""
 
 @app.get("/tasks/{task_id}/ai-summary")
 async def get_ai_summary(
