@@ -152,6 +152,21 @@ export default function ProjectDetait() {
     }
   }
 
+  const reloadStages = () => {
+    API.get(`/projects/${projectId}/stages`)
+      .then(res => {
+        setStages(res.data);
+        if (res.data.length > 0 && !currentStage) {
+          setCurrentStage(res.data[0].id);
+        }
+      })
+      .catch(err => console.error(err));
+  };
+
+  useEffect(() => {
+    reloadStages();
+  }, [projectId]);
+
   useEffect(() => {
     API.get(`/projects/${projectId}`)
       .then(res => {
@@ -163,7 +178,6 @@ export default function ProjectDetait() {
   }, [projectId]);
 
   useEffect(() => {
-    console.log('ME FROM CONTEXT:', me);
     API.get(`/projects/${projectId}/stages`)
       .then(res => {
         setStages(res.data)
@@ -214,8 +228,12 @@ export default function ProjectDetait() {
     setCurrentStage(id)
   }
   async function deleteProject(id: string) {
+    const confirmed = window.confirm('Вы уверены, что хотите удалить проект? Это действие нельзя отменить.');
+    if (!confirmed) return;
+
     try {
       await API.delete(`/projects/${id}`)
+      navigte('/projects');
     }
     catch {
       showToast("Ошибка при удалении")
@@ -371,7 +389,6 @@ export default function ProjectDetait() {
               <button
                 onClick={() => {
                   deleteProject(projectId!);
-                  navigte("/projects");
                 }}
                 className={`${btnOutline} gap-2 transition-colors`}
                 style={{
@@ -504,6 +521,7 @@ export default function ProjectDetait() {
           {whoOpen === 'tasks' && (
             <Tasks
               tasks={tasks}
+              onTasksUpdate={reloadStages}
               setNewTaskOpen={setNewTaskOpen}
               newTaskOpen={newTaskOpen}
               setTaskName={setTaskName}

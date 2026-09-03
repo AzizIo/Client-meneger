@@ -1,5 +1,5 @@
 import { Trash2, Pencil, X, Check } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import API from '../API/api'
 import { useAuth } from '../Context/AuthContext';
 import Files from './Files';
@@ -72,7 +72,8 @@ export default function Tasks({
   projectId,
   stageId,
   onTaskUpdate,
-  setDueDate
+  setDueDate,
+  onTasksUpdate
 }: any) {
   const { me } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
@@ -82,6 +83,7 @@ export default function Tasks({
   const [editDescription, setEditDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const { showToast } = useToast();
+
 
   const taskFilesEndpoints = {
     list: `/projects/${projectId}/stages/${stageId}/tasks/${selectedTask?.id}/files`,
@@ -181,6 +183,15 @@ export default function Tasks({
 
   const inputClass = "w-full rounded-md px-3 py-2 text-sm outline-none transition";
   const inputStyle = { border: `1px solid ${colors.line}`, color: colors.ink };
+  useEffect(() => {
+    if (tasks.some((task: Task) => task.status !== 'approved')) {
+      API.patch(`/projects/${projectId}/stages/${stageId}`, {
+        status: "in_progress"
+      }).then(() => {
+        onTasksUpdate?.(); // теперь родитель тоже перезапросит stages
+      });
+    }
+  }, [tasks]);
 
   return (
     <>
@@ -295,7 +306,7 @@ export default function Tasks({
               return (
                 <motion.div
                   key={task.id}
-                  layout
+
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}

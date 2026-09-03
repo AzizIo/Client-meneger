@@ -7,7 +7,7 @@
 // Аналогия: как Redux store, но только для одного куска данных
 // (текущий пользователь) и без лишних зависимостей.
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import API from '../API/api';
 
@@ -69,9 +69,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMe(null);
     localStorage.removeItem('token');
   }
+  const value = useMemo(() => ({ me, isLoading, clearMe, refetchMe: fetchMe }), [me, isLoading]);
 
   return (
-    <AuthContext.Provider value={{ me, isLoading, clearMe, refetchMe: fetchMe }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
