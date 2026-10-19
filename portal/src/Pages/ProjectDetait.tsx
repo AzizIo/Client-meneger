@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { motion, useReducedMotion } from 'motion/react';
 import API from '../API/api'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Link, PenLine, X, Trash2 } from 'lucide-react';
@@ -128,6 +129,7 @@ export default function ProjectDetait() {
   const isExecutor = me?.role === 'executor';
   const isProjectOwner = me?.id === project?.executor_id;
   const navigte = useNavigate();
+  const shouldReduceMotion = useReducedMotion();
 
   const stageFilesEndpoints = {
     list: `/projects/${projectId}/stages/${currentStage}/files`,
@@ -203,9 +205,28 @@ export default function ProjectDetait() {
     </div>
   );
   if (!project) return (
-    <div className="flex items-center justify-center min-h-screen text-sm" style={{ color: colors.muted }}>
-      Проект не найден
-    </div>
+    <motion.div
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: shouldReduceMotion ? 0 : 0.42, ease: [0.2, 0.75, 0.3, 1] }}
+      className="flex min-h-screen flex-col items-center justify-center gap-4 text-center text-sm"
+    >
+      <div style={{ color: colors.muted }}>Проект не найден</div>
+      <motion.button
+        type="button"
+        onClick={() => navigte('/main')}
+        whileHover={shouldReduceMotion ? undefined : {
+          y: -2,
+          scale: 1.02,
+          boxShadow: '0 5px 14px rgb(24 32 38 / 16%)',
+        }}
+        whileTap={shouldReduceMotion ? undefined : { y: 0, scale: 0.98 }}
+        className={`${btnPrimary} focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-current`}
+        style={btnPrimaryStyle}
+      >
+        Перейти на главную
+      </motion.button>
+    </motion.div>
   );
 
   async function createTask(e: React.FormEvent<HTMLFormElement>) {

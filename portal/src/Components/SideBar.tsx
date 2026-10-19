@@ -100,7 +100,11 @@ export default function Sidebar() {
               </nav>
 
               <div className="mt-auto pt-4 flex items-center justify-between" style={{ borderTop: `1px solid ${colors.line}` }}>
-                <div className="flex items-center gap-2 min-w-0">
+                <NavLink
+                  to="/profile"
+                  aria-label="Открыть профиль"
+                  className="flex min-w-0 items-center gap-2 rounded-md text-left transition-opacity hover:opacity-75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+                >
                   {me?.avatar_url ? (
                     <img
                       className="h-8 w-8 rounded-full object-cover shrink-0"
@@ -118,7 +122,7 @@ export default function Sidebar() {
                   <span className="text-sm truncate" style={{ color: colors.ink }}>
                     {me?.full_name}
                   </span>
-                </div>
+                </NavLink>
 
                 <button
                   type="button"
